@@ -3,97 +3,95 @@ import pandas as pd
 import requests
 from datetime import datetime
 
-# Your FMP Key (hardcoded for testing)
 API_KEY = "Q36YW4o2v1XwkQHhj5zVxbI3C6vDjgGC"
 
-st.set_page_config(page_title="AI HOD Scanner", layout="wide")
-st.title("🚀 AI-Enhanced HOD Momentum Scanner")
-st.markdown("**FMP + AI-powered day trading scanner** | Refresh for latest data")
-
-# Sidebar
-with st.sidebar:
-    st.header("Settings")
-    tickers_input = st.text_input("Tickers (comma-separated)", "AAPL, NVDA, TSLA, KIDZ, ZCMD, IREN")
-    st.caption("Add more tickers or use dynamic scanner later")
-
-tickers = [t.strip().upper() for t in tickers_input.split(",")]
+st.set_page_config(page_title="HOD Scanner - Your Criteria", layout="wide")
+st.title("🚀 Your HOD Momentum Scanner")
+st.markdown("**Criteria:** ≥20% up | ≥3x RVOL | Float ≤30M | $1–$20 | News Catalyst")
 
 # FMP Functions
-def get_batch_quotes(symbols):
-    if not symbols:
-        return pd.DataFrame()
-    url = f"https://financialmodelingprep.com/api/v3/quote/{','.join(symbols)}?apikey={API_KEY}"
+def get_top_gainers():
+    url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={API_KEY}"
     try:
-        data = requests.get(url, timeout=10).json()
+        data = requests.get(url, timeout=15).json()
         return pd.DataFrame(data)
-    except Exception as e:
-        st.error(f"Error fetching quotes: {e}")
+    except:
+        st.error("Error fetching gainers")
         return pd.DataFrame()
 
-def get_news(symbol, limit=5):
-    url = f"https://financialmodelingprep.com/api/v3/stock_news?tickers={symbol}&limit={limit}&apikey={API_KEY}"
+def get_float(symbol):
+    url = f"https://financialmodelingprep.com/api/v3/shares-float?symbol={symbol}&apikey={API_KEY}"
+    try:
+        data = requests.get(url, timeout=10).json()
+        return data[0]['freeFloat'] if data else None
+    except:
+        return None
+
+def get_news(symbol):
+    url = f"https://financialmodelingprep.com/api/v3/stock_news?tickers={symbol}&limit=3&apikey={API_KEY}"
     try:
         return requests.get(url, timeout=10).json()
     except:
         return []
 
-# Simple AI Analyzer
-def ai_analyze(row, news_items):
-    change_pct = row.get('changesPercentage', 0) or row.get('changePercent', 0)
-    score = max(1, min(10, int(abs(change_pct) * 0.08 + len(news_items) * 1.5 + 4)))
-    sentiment = "Bullish" if change_pct > 5 else "Neutral" if change_pct > 0 else "Bearish"
-    
-    thesis = f"{len(news_items)} recent news items. "
-    if score >= 8:
-        thesis += "Strong momentum + catalyst potential."
-    elif score >= 6:
-        thesis += "Decent volume, watch for continuation."
-    else:
-        thesis += "Lower conviction setup."
-    
-    return {
-        "ai_score": score,
-        "sentiment": sentiment,
-        "thesis": thesis[:180] + "..." if len(thesis) > 180 else thesis,
-        "risk": "High vol - use tight stops" if score > 7 else "Moderate"
-    }
-
-# Run Scan
-if st.button("🔄 Run Full Scan Now", type="primary"):
-    with st.spinner("Fetching real-time data from FMP..."):
-        df = get_batch_quotes(tickers)
+# Main Scan
+if st.button("🔄 Run Full Market Scan", type="primary"):
+    with st.spinner("Scanning market for your criteria..."):
+        df = get_top_gainers()
         
         if df.empty:
-            st.warning("No data returned. Check tickers or your API key limits.")
+            st.error("No data returned.")
         else:
+            # Initial broad filter
+            candidates = df[
+                (df['changesPercentage'] >= 20) &
+                (df['price'] >= 1) & (df['price'] <= 20)
+            ].copy()
+            
             results = []
-            for _, row in df.iterrows():
+            for _, row in candidates.iterrows():
                 symbol = row['symbol']
-                news = get_news(symbol)
-                ai = ai_analyze(row.to_dict(), news)
+                price = row['price']
+                change_pct = row['changesPercentage']
+                volume = row['volume']
+                
+                # Float check
+                float_val = get_float(symbol)
+                if float_val is None or float_val > 30000000:
+                    continue
+                
+                # Rough RVOL (high volume proxy)
+                rvol_proxy = volume / 1000000  # simplistic
+                
+                if rvol_proxy < 3:
+                    continue
+                
+                news_list = get_news(symbol)
+                news_text = news_list[0]['title'] if news_list else "No recent news"
+                
+                ai_score = min(10, int(change_pct * 0.12 + 5))
                 
                 results.append({
                     "Ticker": symbol,
-                    "Price": round(row.get('price', 0), 2),
-                    "% Change": round(row.get('changesPercentage', 0), 2),
-                    "Volume": f"{int(row.get('volume', 0)):,}",
-                    "AI Score": ai['ai_score'],
-                    "Sentiment": ai['sentiment'],
-                    "Thesis": ai['thesis'],
-                    "Risk": ai['risk']
+                    "Price": round(price, 2),
+                    "% Change": round(change_pct, 2),
+                    "Volume": f"{int(volume):,}",
+                    "Float (M)": round(float_val / 1000000, 1) if float_val else "N/A",
+                    "AI Score": ai_score,
+                    "News Catalyst": news_text[:120] + "..." if len(news_text) > 120 else news_text
                 })
             
-            results_df = pd.DataFrame(results)
-            results_df = results_df.sort_values("AI Score", ascending=False)
-            
-            st.success(f"✅ Scan complete at {datetime.now().strftime('%H:%M:%S')}")
-            st.dataframe(results_df, use_container_width=True, height=500)
-            
-            st.subheader("📋 AI Insights")
-            for _, r in results_df.iterrows():
-                with st.expander(f"{r['Ticker']} — AI Score: {r['AI Score']}/10"):
-                    st.write(f"**{r['Sentiment']}**")
-                    st.write(r['Thesis'])
-                    st.write(f"**Risk:** {r['Risk']}")
+            if results:
+                results_df = pd.DataFrame(results).sort_values("% Change", ascending=False)
+                st.success(f"Found {len(results)} stocks matching your criteria!")
+                
+                for _, r in results_df.iterrows():
+                    if r['AI Score'] >= 8:
+                        st.balloons()
+                        st.success(f"🚨 STRONG PING → {r['Ticker']} | {r['% Change']}% | {r['News Catalyst']}")
+                
+                st.dataframe(results_df, use_container_width=True, height=600)
+            else:
+                st.info("No stocks currently meet all criteria. Market may be quiet — try again later.")
 
-st.caption("Tested with your FMP key. Next: Add real LLM, charts, or full-market scanning.")
+st.caption("Full market scan using FMP gainers + your filters. News titles included. Refine AI or add Telegram pings next.")
