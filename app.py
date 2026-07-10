@@ -30,6 +30,8 @@ if "top_gainers_history" not in st.session_state:
     st.session_state.top_gainers_history = pd.DataFrame()
 if "last_top_change" not in st.session_state:
     st.session_state.last_top_change = 0
+if "last_news" not in st.session_state:
+    st.session_state.last_news = []
 
 # #1 Gainer Box
 gainer_box = st.empty()
@@ -50,6 +52,7 @@ with st.expander("📊 Filters", expanded=True):
             st.session_state.stats = {"pings": 0, "strong": 0}
             st.session_state.top_gainers_history = pd.DataFrame()
             st.session_state.last_top_change = 0
+            st.session_state.last_news = []
             st.rerun()
 
 # Layout
@@ -214,15 +217,23 @@ while True:
             
             st.session_state.qualified = st.session_state.qualified[:20]
         
-        # Latest News
+        # Latest News with Voice + Telegram
         with news_placeholder.container():
             news_df = get_latest_news()
             if not news_df.empty:
+                new_news = []
                 for _, item in news_df.head(5).iterrows():
-                    st.markdown(f"**{item.get('title', 'No Title')}**")
+                    title = item.get('title', 'No Title')
+                    ticker = item.get('symbol', '')
+                    if title not in st.session_state.last_news:
+                        new_news.append(title)
+                        speak(f"{ticker} {title}")  # Computer voice: ticker + headline
+                        send_telegram(f"📰 News: {title}\n{item.get('text', '')[:200]}...")
+                    st.markdown(f"**{title}**")
                     st.caption(item.get('publishedDate', ''))
                     st.write(item.get('text', 'No summary')[:300] + "...")
                     st.markdown("---")
+                st.session_state.last_news = list(news_df.head(10)['title'])
             else:
                 st.write("No news available")
         
