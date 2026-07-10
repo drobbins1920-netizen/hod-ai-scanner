@@ -53,18 +53,18 @@ with st.expander("📊 Filters", expanded=True):
             st.rerun()
 
 # Layout
-left_col, right_col = st.columns([2, 3])
+col_left, col_right = st.columns([2, 3])
 
-with left_col:
-    st.subheader("🏆 Top Gainers")
+with col_left:
+    st.markdown('<div style="border: 2px solid #444; border-radius: 8px; padding: 10px;">🏆 Top Gainers</div>', unsafe_allow_html=True)
     session_filter = st.selectbox("Session", ["Pre-Market", "Regular Hours", "After Hours"], index=1)
     top_gainers_placeholder = st.empty()
 
-with right_col:
-    st.subheader("🔍 Live HOD Scanner")
+with col_right:
+    st.markdown('<div style="border: 2px solid #444; border-radius: 8px; padding: 10px;">🔍 Live HOD Scanner</div>', unsafe_allow_html=True)
     scanner_placeholder = st.empty()
 
-st.subheader("📈 Mini Charts")
+st.markdown('<div style="border: 2px solid #444; border-radius: 8px; padding: 10px;">📈 Mini Charts</div>', unsafe_allow_html=True)
 charts_placeholder = st.empty()
 
 placeholder = st.empty()
@@ -73,19 +73,13 @@ def get_top_gainers():
     url = f"https://financialmodelingprep.com/stable/biggest-gainers?apikey={FMP_API_KEY}"
     try:
         response = requests.get(url, timeout=15)
-        st.write("Status:", response.status_code)
         data = response.json()
-        st.write("Data type:", type(data))
         if isinstance(data, list):
             df = pd.DataFrame(data)
         else:
             df = pd.DataFrame()
-        if not df.empty:
-            st.success(f"Fetched {len(df)} gainers")
-            st.write(df.head(5))
         return df
-    except Exception as e:
-        st.error(f"Error: {e}")
+    except:
         return pd.DataFrame()
 
 def get_news_title(symbol):
@@ -140,7 +134,7 @@ while True:
         df = get_top_gainers()
         
         if not df.empty:
-            # #1 Gainer Box
+            # #1 Gainer Box (flashing + bell on 10% change or new ticker)
             top = df.iloc[0]
             color = "lime" if top.get('changesPercentage', 0) > 0 else "red"
             flash_speed = "0.5s" if abs(top.get('changesPercentage', 0) - st.session_state.last_top_change) >= 10 else "5s"
@@ -155,12 +149,11 @@ while True:
             
             st.session_state.last_top_change = top.get('changesPercentage', 0)
             
-            # Voice for top gainer
-            speak(f"{top['symbol']} news catalyst" if "news" in get_news_title(top['symbol']).lower() else top['symbol'])
-            
-            # Top Gainers list
+            # Top Gainers list (no Name, green %)
             with top_gainers_placeholder.container():
-                st.dataframe(df.head(15), use_container_width=True, height=400)
+                display_df = df.head(15)[['symbol', 'price', 'changesPercentage', 'volume']].copy()
+                display_df['% Change'] = display_df['changesPercentage'].apply(lambda x: f"{x:.2f}%")
+                st.dataframe(display_df[['symbol', 'price', '% Change', 'volume']], use_container_width=True, height=400)
             
             # Scanner
             with scanner_placeholder.container():
@@ -204,7 +197,7 @@ while True:
                         st.success(alert)
                         send_telegram(alert)
                     
-                    # Voice for scanner tickers
+                    # Voice for scanner tickers only
                     speak(f"{symbol} news catalyst" if "news" in news.lower() else symbol)
             
             st.session_state.qualified = st.session_state.qualified[:20]
