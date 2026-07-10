@@ -18,13 +18,14 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 st.set_page_config(page_title="DR Dashboard", layout="wide")
+st.title("DR Dashboard")
 
-# Top Title
-col_title, col_time = st.columns([3, 1])
-with col_title:
-    st.title("DR Dashboard")
-with col_time:
-    st.caption(f"EDT: {datetime.now(pytz.timezone('US/Eastern')).strftime('%H:%M:%S')}")
+edt = pytz.timezone('US/Eastern')
+
+if "qualified" not in st.session_state:
+    st.session_state.qualified = []
+if "stats" not in st.session_state:
+    st.session_state.stats = {"pings": 0, "strong": 0}
 
 # Filters
 with st.expander("📊 Filters", expanded=True):
@@ -42,162 +43,110 @@ with st.expander("📊 Filters", expanded=True):
             st.session_state.stats = {"pings": 0, "strong": 0}
             st.rerun()
 
-# Main Layout
+# Layout
 left_col, right_col = st.columns([2, 3])
 
 with left_col:
-    st.subheader("📈 Live Charts")
-    chart_placeholder1 = st.empty()
-    chart_placeholder2 = st.empty()
+    st.subheader("🏆 Top Gainers")
+    session_filter = st.selectbox("Session", ["Pre-Market", "Regular Hours", "After Hours"], index=1)
+    top_gainers_placeholder = st.empty()
 
 with right_col:
-    st.subheader("🔍 Live Scanner")
-    table_placeholder = st.empty()
+    st.subheader("🔍 Live HOD Scanner")
+    scanner_placeholder = st.empty()
 
-# Session State
-if "qualified" not in st.session_state:
-    st.session_state.qualified = []
-if "stats" not in st.session_state:
-    st.session_state.stats = {"pings": 0, "strong": 0}
-
-def get_top_gainers():
-    url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={FMP_API_KEY}"
-    try:
-        return pd.DataFrame(requests.get(url, timeout=15).json())
-    except:
-        return pd.DataFrame()
-
-def get_news_title(symbol):
-    url = f"https://financialmodelingprep.com/api/v3/stock_news?tickers={symbol}&limit=1&apikey={FMP_API_KEY}"
-    try:
-        data = requests.get(url, timeout=8).json()
-        return data[0]['title'] if data else "No news"
-    except:
-        return "News unavailable"
-
-def grok_analyze(symbol, change, price, volume, news):
-    prompt = f"""Analyze this HOD momentum stock:
-Ticker: {symbol}
-% Change: {change}%
-Price: ${price}
-Volume: {volume}
-News: {news}
-
-Provide:
-- AI Score (1-10)
-- Thesis (1-2 sentences)"""
-    try:
-        resp = requests.post(
-            "https://api.x.ai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {GROK_API_KEY}", "Content-Type": "application/json"},
-            json={"model": "grok-beta", "messages": [{"role": "user", "content": prompt}], "temperature": 0.7},
-            timeout=15
-        ).json()
-        content = resp['choices'][0]['message']['content']
-        return {"score": 8, "thesis": content[:200]}
-    except:
-        return {"score": 7, "thesis": "Strong momentum detected."}
-
-def send_telegram(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
-    try:
-        requests.post(url, json=payload, timeout=5)
-    except:
-        pass
-
-def play_sound():
-    st.components.v1.html('<audio autoplay><source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg"></audio>', height=0)
+st.subheader("📈 Mini Charts")
+charts_placeholder = st.empty()
 
 placeholder = st.empty()
 
 while True:
     with placeholder.container():
+        st.caption(f"EDT: {datetime.now(edt).strftime('%H:%M:%S')} | Refresh: {refresh_sec}s")
+        
         df = get_top_gainers()
         
         if not df.empty:
-            candidates = df[
-                (df['changesPercentage'] >= min_gain) &
-                (df['price'].between(min_price, max_price))
-            ].copy()
+            # Top Gainers
+            with top_gainers_placeholder.container():
+                st.dataframe(df.head(10)[['symbol', 'price', 'changesPercentage', 'volume']], use_container_width=True)
             
-            for _, row in candidates.iterrows():
-                symbol = row['symbol']
-                if any(item.get('Ticker') == symbol for item in st.session_state.qualified):
-                    continue
+            # Scanner
+            with scanner_placeholder.container():
+                candidates = df[
+                    (df['changesPercentage'] >= min_gain) &
+                    (df['price'].between(min_price, max_price))
+                ].copy()
                 
-                rvol = round(row['volume'] / 500000, 1)
-                if rvol < min_rvol: continue
-                
-                try:
-                    fdata = requests.get(f"https://financialmodelingprep.com/api/v3/shares-float?symbol={symbol}&apikey={FMP_API_KEY}", timeout=6).json()
-                    float_m = fdata[0].get('freeFloat', 999999999) / 1_000_000 if fdata else 999
-                except:
-                    float_m = 999
-                if float_m > max_float_m: continue
-                
-                news = get_news_title(symbol)
-                ai = grok_analyze(symbol, row['changesPercentage'], row['price'], row['volume'], news)
-                
-                new_item = {
-                    "Ticker": f"[{symbol}](https://finance.yahoo.com/quote/{symbol})",
-                    "Price": round(row['price'], 2),
-                    "% Gain": round(row['changesPercentage'], 2),
-                    "Volume": f"{int(row['volume']):,}",
-                    "Float (M)": round(float_m, 1),
-                    "RVOL": rvol,
-                    "AI Score": ai['score'],
-                    "Thesis": ai['thesis'],
-                    "News": news[:90] + "..." if len(news) > 90 else news,
-                    "Time": datetime.now(edt).strftime("%H:%M:%S")
-                }
-                
-                st.session_state.qualified.insert(0, new_item)
-                st.session_state.stats["pings"] += 1
-                
-                if ai['score'] >= 8:
-                    play_sound()
-                    st.session_state.stats["strong"] += 1
-                    alert = f"🚨 GROK AI PING!\n{symbol} +{new_item['% Gain']}% (Score {ai['score']}/10)\n{ai['thesis']}\n{new_item['News']}"
-                    st.success(alert)
-                    send_telegram(alert)
-        
-        st.session_state.qualified = st.session_state.qualified[:20]
-        
-        # Update right column
-        with table_placeholder.container():
-            if st.session_state.qualified:
-                st.dataframe(pd.DataFrame(st.session_state.qualified), use_container_width=True, height=600)
-            else:
-                st.info("Scanning... No matches yet.")
-        
-        # Update left column charts
-        with chart_placeholder1.container():
-            if st.session_state.qualified:
-                item = st.session_state.qualified[0]
-                symbol = item["Ticker"].split('[')[1].split(']')[0] if '[' in item["Ticker"] else item["Ticker"]
-                st.markdown(f"**Top Match: {symbol}**")
-                try:
-                    data = yf.download(symbol, period="1d", interval="5m")
-                    if not data.empty:
-                        # MACD + VWAP code (as before)
-                        data['MA5'] = data['Close'].rolling(5).mean()
-                        data['MA20'] = data['Close'].rolling(20).mean()
-                        data['VWAP'] = (data['TypicalPrice'] * data['Volume']).cumsum() / data['Volume'].cumsum()
-                        # ... full chart code
-                        fig = make_subplots(rows=3, cols=1, shared_xaxes=True, row_heights=[0.5, 0.3, 0.2])
-                        fig.add_trace(go.Candlestick(x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close']), row=1, col=1)
-                        fig.add_trace(go.Scatter(x=data.index, y=data['VWAP'], name="VWAP", line=dict(color="orange")), row=1, col=1)
-                        fig.add_trace(go.Bar(x=data.index, y=data['Volume']), row=2, col=1)
-                        st.plotly_chart(fig, use_container_width=True)
-                except:
-                    st.write("Chart unavailable")
-        
-        with chart_placeholder2.container():
-            if len(st.session_state.qualified) > 1:
-                item = st.session_state.qualified[1]
-                symbol = item["Ticker"].split('[')[1].split(']')[0] if '[' in item["Ticker"] else item["Ticker"]
-                st.markdown(f"**Runner-up: {symbol}**")
-                # Same chart code as above
+                for _, row in candidates.iterrows():
+                    symbol = row['symbol']
+                    if any(item.get('Ticker') == symbol for item in st.session_state.qualified):
+                        continue
+                    
+                    rvol = round(row['volume'] / 500000, 1)
+                    if rvol < min_rvol: continue
+                    
+                    try:
+                        fdata = requests.get(f"https://financialmodelingprep.com/api/v3/shares-float?symbol={symbol}&apikey={FMP_API_KEY}", timeout=6).json()
+                        float_m = fdata[0].get('freeFloat', 999999999) / 1_000_000 if fdata else 999
+                    except:
+                        float_m = 999
+                    if float_m > max_float_m: continue
+                    
+                    news = get_news_title(symbol)
+                    ai = grok_analyze(symbol, row['changesPercentage'], row['price'], row['volume'], news)
+                    
+                    new_item = {
+                        "Ticker": f"[{symbol}](https://finance.yahoo.com/quote/{symbol})",
+                        "Price": round(row['price'], 2),
+                        "% Gain": round(row['changesPercentage'], 2),
+                        "Volume": f"{int(row['volume']):,}",
+                        "Float (M)": round(float_m, 1),
+                        "RVOL": rvol,
+                        "AI Score": ai['score'],
+                        "Thesis": ai['thesis'],
+                        "News": news[:90] + "..." if len(news) > 90 else news,
+                        "Time": datetime.now(edt).strftime("%H:%M:%S")
+                    }
+                    
+                    st.session_state.qualified.insert(0, new_item)
+                    st.session_state.stats["pings"] += 1
+                    
+                    if ai['score'] >= 8:
+                        play_sound()
+                        st.session_state.stats["strong"] += 1
+                        alert = f"🚨 GROK AI PING!\n{symbol} +{new_item['% Gain']}% (Score {ai['score']}/10)\n{ai['thesis']}\n{new_item['News']}"
+                        st.success(alert)
+                        send_telegram(alert)
+            
+            st.session_state.qualified = st.session_state.qualified[:20]
+            
+            # Charts
+            with charts_placeholder.container():
+                for item in st.session_state.qualified[:4]:
+                    symbol = item["Ticker"].split('[')[1].split(']')[0] if '[' in item["Ticker"] else item["Ticker"]
+                    st.markdown(f"**{symbol}**")
+                    try:
+                        data = yf.download(symbol, period="1d", interval="5m")
+                        if not data.empty:
+                            data['MA5'] = data['Close'].rolling(5).mean()
+                            data['MA20'] = data['Close'].rolling(20).mean()
+                            data['TypicalPrice'] = (data['High'] + data['Low'] + data['Close']) / 3
+                            data['TPV'] = data['TypicalPrice'] * data['Volume']
+                            data['VWAP'] = data['TPV'].cumsum() / data['Volume'].cumsum()
+                            exp1 = data['Close'].ewm(span=12, adjust=False).mean()
+                            exp2 = data['Close'].ewm(span=26, adjust=False).mean()
+                            data['MACD'] = exp1 - exp2
+                            data['Signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
+                            
+                            fig = make_subplots(rows=3, cols=1, shared_xaxes=True, row_heights=[0.5, 0.3, 0.2])
+                            fig.add_trace(go.Candlestick(x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close']), row=1, col=1)
+                            fig.add_trace(go.Scatter(x=data.index, y=data['VWAP'], name="VWAP", line=dict(color="orange")), row=1, col=1)
+                            fig.add_trace(go.Bar(x=data.index, y=data['Volume']), row=2, col=1)
+                            fig.add_trace(go.Scatter(x=data.index, y=data['MACD'], name="MACD"), row=3, col=1)
+                            fig.add_trace(go.Scatter(x=data.index, y=data['Signal'], name="Signal"), row=3, col=1)
+                            st.plotly_chart(fig, use_container_width=True)
+                    except:
+                        st.write(f"Chart unavailable for {symbol}")
         
         time.sleep(refresh_sec)
