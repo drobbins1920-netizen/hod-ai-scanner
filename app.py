@@ -149,7 +149,7 @@ while True:
             
             st.session_state.last_top_change = top.get('changesPercentage', 0)
             
-            # Top Gainers list (no Name, green %)
+            # Top Gainers list
             with top_gainers_placeholder.container():
                 display_df = df.head(15).copy()
                 display_df['% Change'] = display_df.get('changesPercentage', 0).apply(lambda x: f"{x:.2f}%")
