@@ -36,15 +36,15 @@ if "last_news" not in st.session_state:
 # #1 Gainer Box
 gainer_box = st.empty()
 
-# Filters
+# Filters (for scanner)
 with st.expander("📊 Filters", expanded=True):
     col1, col2, col3 = st.columns(3)
     with col1:
-        min_gain = st.slider("Min % Gain", 5, 100, 20)
-        min_price, max_price = st.slider("Price Range ($)", 0.5, 50.0, (1.0, 20.0), step=0.5)
+        min_gain = st.slider("Min % Gain", 5, 100, 10)  # Lowered for testing
+        min_price, max_price = st.slider("Price Range ($)", 0.5, 50.0, (1.0, 50.0), step=0.5)
     with col2:
-        max_float_m = st.slider("Max Float (M)", 5, 100, 30)
-        min_rvol = st.slider("Min RVOL", 1.0, 10.0, 3.0, step=0.5)
+        max_float_m = st.slider("Max Float (M)", 5, 200, 100)
+        min_rvol = st.slider("Min RVOL", 1.0, 10.0, 2.0, step=0.5)
     with col3:
         refresh_sec = st.slider("Refresh (seconds)", 10, 60, 20)
         if st.button("Clear Dashboard"):
@@ -170,7 +170,7 @@ while True:
                     cols.append('volume')
                 st.dataframe(display_df[cols], use_container_width=True, height=400)
             
-            # Scanner
+            # Live HOD Scanner (relaxed for testing new highs)
             with scanner_placeholder.container():
                 candidates = df[
                     (df.get('changesPercentage', 0) >= min_gain) &
@@ -228,7 +228,7 @@ while True:
                     ticker = item.get('symbol', '')
                     if title not in st.session_state.last_news:
                         new_news.append(title)
-                        speak(f"{ticker} {title}")  # Computer voice
+                        speak(f"{ticker} {title}")
                         send_telegram(f"📰 News: {title}\n{item.get('text', '')[:200]}...\nRead more: {url}")
                     st.markdown(f"**[{title}]({url})**")
                     st.caption(item.get('publishedDate', ''))
