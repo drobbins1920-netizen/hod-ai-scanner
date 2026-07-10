@@ -31,7 +31,7 @@ if "top_gainers_history" not in st.session_state:
 if "last_top_change" not in st.session_state:
     st.session_state.last_top_change = 0
 
-# #1 Gainer Box (always visible)
+# #1 Gainer Box (always visible, right under title)
 gainer_box = st.empty()
 
 # Filters
