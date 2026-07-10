@@ -128,7 +128,7 @@ while True:
         df = get_top_gainers()
         
         if not df.empty:
-            # Top Gainer Box with flashing
+            # Top Gainer Box
             top = df.iloc[0]
             color = "lime" if top['changesPercentage'] > 0 else "red"
             flash_speed = "0.5s" if abs(top['changesPercentage'] - st.session_state.last_top_change) >= 10 else "5s"
@@ -138,9 +138,12 @@ while True:
             </div>
             """, unsafe_allow_html=True)
             
+            if abs(top['changesPercentage'] - st.session_state.last_top_change) >= 10:
+                play_sound()  # Bell sound for big move
+            
             st.session_state.last_top_change = top['changesPercentage']
             
-            # Voice for top gainer
+            # Voice for top gainer only
             speak(f"{top['symbol']} news catalyst" if "news" in get_news_title(top['symbol']).lower() else top['symbol'])
             
             # Top Gainers list
@@ -194,6 +197,9 @@ while True:
                         alert = f"🚨 GROK AI PING!\n{symbol} +{new_item['% Gain']}% (Score {ai['score']}/10)\n{ai['thesis']}\n{new_item['News']}"
                         st.success(alert)
                         send_telegram(alert)
+                    
+                    # Voice for scanner tickers
+                    speak(f"{symbol} news catalyst" if "news" in news.lower() else symbol)
             
             st.session_state.qualified = st.session_state.qualified[:20]
             
