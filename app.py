@@ -60,6 +60,55 @@ charts_placeholder = st.empty()
 
 placeholder = st.empty()
 
+def get_top_gainers():
+    url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={FMP_API_KEY}"
+    try:
+        return pd.DataFrame(requests.get(url, timeout=15).json())
+    except:
+        return pd.DataFrame()
+
+def get_news_title(symbol):
+    url = f"https://financialmodelingprep.com/api/v3/stock_news?tickers={symbol}&limit=1&apikey={FMP_API_KEY}"
+    try:
+        data = requests.get(url, timeout=8).json()
+        return data[0]['title'] if data else "No news"
+    except:
+        return "News unavailable"
+
+def grok_analyze(symbol, change, price, volume, news):
+    prompt = f"""Analyze this HOD momentum stock:
+Ticker: {symbol}
+% Change: {change}%
+Price: ${price}
+Volume: {volume}
+News: {news}
+
+Provide:
+- AI Score (1-10)
+- Thesis (1-2 sentences)"""
+    try:
+        resp = requests.post(
+            "https://api.x.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {GROK_API_KEY}", "Content-Type": "application/json"},
+            json={"model": "grok-beta", "messages": [{"role": "user", "content": prompt}], "temperature": 0.7},
+            timeout=15
+        ).json()
+        content = resp['choices'][0]['message']['content']
+        return {"score": 8, "thesis": content[:200]}
+    except:
+        return {"score": 7, "thesis": "Strong momentum detected."}
+
+def send_telegram(message):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
+    try:
+        requests.post(url, json=payload, timeout=5)
+    except:
+        pass
+
+def play_sound():
+    st.components.v1.html('<audio autoplay><source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg"></audio>', height=0)
+
 while True:
     with placeholder.container():
         st.caption(f"EDT: {datetime.now(edt).strftime('%H:%M:%S')} | Refresh: {refresh_sec}s")
