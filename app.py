@@ -73,17 +73,13 @@ def get_top_gainers():
     url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={FMP_API_KEY}"
     try:
         response = requests.get(url, timeout=15)
-        st.write("Status:", response.status_code)
         data = response.json()
-        st.write("Data type:", type(data))
         if isinstance(data, list):
             df = pd.DataFrame(data)
         else:
-            df = pd.DataFrame(list(data.items())) if isinstance(data, dict) else pd.DataFrame()
-        st.write("DataFrame shape:", df.shape)
+            df = pd.DataFrame()
         if not df.empty:
             st.success(f"Fetched {len(df)} gainers")
-            st.write(df.head(5))
         return df
     except Exception as e:
         st.error(f"Error: {e}")
@@ -140,34 +136,34 @@ while True:
         
         df = get_top_gainers()
         
-        if not df.empty and 'changesPercentage' in df.columns:
+        if not df.empty:
             # #1 Gainer Box
             top = df.iloc[0]
-            color = "lime" if top['changesPercentage'] > 0 else "red"
-            flash_speed = "0.5s" if abs(top['changesPercentage'] - st.session_state.last_top_change) >= 10 else "5s"
+            color = "lime" if top.get('changesPercentage', 0) > 0 else "red"
+            flash_speed = "0.5s" if abs(top.get('changesPercentage', 0) - st.session_state.last_top_change) >= 10 else "5s"
             gainer_box.markdown(f"""
             <div style="background-color: #1a1a1a; padding: 20px; border: 2px solid #444; border-radius: 10px; text-align: center; font-size: 3em; font-weight: bold; color: {color}; animation: flash {flash_speed} infinite;">
-                #1 Gainer: {top['symbol']} +{round(top['changesPercentage'], 1)}%
+                #1 Gainer: {top['symbol']} +{round(top.get('changesPercentage', 0), 1)}%
             </div>
             """, unsafe_allow_html=True)
             
-            if abs(top['changesPercentage'] - st.session_state.last_top_change) >= 10:
+            if abs(top.get('changesPercentage', 0) - st.session_state.last_top_change) >= 10:
                 play_sound()
             
-            st.session_state.last_top_change = top['changesPercentage']
+            st.session_state.last_top_change = top.get('changesPercentage', 0)
             
             # Voice for top gainer
             speak(f"{top['symbol']} news catalyst" if "news" in get_news_title(top['symbol']).lower() else top['symbol'])
             
             # Top Gainers list
             with top_gainers_placeholder.container():
-                st.dataframe(df.head(15)[['symbol', 'price', 'changesPercentage', 'volume']], use_container_width=True, height=400)
+                st.dataframe(df.head(15), use_container_width=True, height=400)
             
             # Scanner
             with scanner_placeholder.container():
                 candidates = df[
-                    (df['changesPercentage'] >= min_gain) &
-                    (df['price'].between(min_price, max_price))
+                    (df.get('changesPercentage', 0) >= min_gain) &
+                    (df.get('price', 0).between(min_price, max_price))
                 ].copy()
                 
                 for _, row in candidates.iterrows():
@@ -175,24 +171,18 @@ while True:
                     if any(item.get('Ticker') == symbol for item in st.session_state.qualified):
                         continue
                     
-                    rvol = round(row['volume'] / 500000, 1)
+                    rvol = round(row.get('volume', 0) / 500000, 1)
                     if rvol < min_rvol: continue
                     
-                    try:
-                        fdata = requests.get(f"https://financialmodelingprep.com/api/v3/shares-float?symbol={symbol}&apikey={FMP_API_KEY}", timeout=6).json()
-                        float_m = fdata[0].get('freeFloat', 999999999) / 1_000_000 if fdata else 999
-                    except:
-                        float_m = 999
-                    if float_m > max_float_m: continue
-                    
+                    float_m = 999
                     news = get_news_title(symbol)
-                    ai = grok_analyze(symbol, row['changesPercentage'], row['price'], row['volume'], news)
+                    ai = grok_analyze(symbol, row.get('changesPercentage', 0), row.get('price', 0), row.get('volume', 0), news)
                     
                     new_item = {
                         "Ticker": f"[{symbol}](https://finance.yahoo.com/quote/{symbol})",
-                        "Price": round(row['price'], 2),
-                        "% Gain": round(row['changesPercentage'], 2),
-                        "Volume": f"{int(row['volume']):,}",
+                        "Price": round(row.get('price', 0), 2),
+                        "% Gain": round(row.get('changesPercentage', 0), 2),
+                        "Volume": f"{int(row.get('volume', 0)):,}",
                         "Float (M)": round(float_m, 1),
                         "RVOL": rvol,
                         "AI Score": ai['score'],
