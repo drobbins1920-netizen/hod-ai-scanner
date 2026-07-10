@@ -8,28 +8,26 @@ API_KEY = "Q36YW4o2v1XwkQHhj5zVxbI3C6vDjgGC"
 
 st.set_page_config(page_title="Live HOD Scanner", layout="wide")
 st.title("🚀 Live HOD Momentum Scanner")
-st.caption("Newest matches appear at the top • Auto-refresh every 20s • Premium Plan")
+st.caption("Newest at top • Click tickers for charts • Sound on strong matches")
 
-# === SIDEBAR FILTERS ===
+# Sidebar Filters
 with st.sidebar:
-    st.header("Filters (Adjust Live)")
-    
-    min_gain = st.slider("Minimum % Gain", 5, 100, 20)
+    st.header("Live Filters")
+    min_gain = st.slider("Min % Gain", 5, 100, 20)
     min_price, max_price = st.slider("Price Range ($)", 0.5, 50.0, (1.0, 20.0), step=0.5)
-    max_float_m = st.slider("Max Float (Millions)", 5, 100, 30)
-    min_rvol = st.slider("Minimum RVOL (approx)", 1.0, 10.0, 3.0, step=0.5)
-    
-    refresh_seconds = st.slider("Auto-refresh (seconds)", 10, 60, 20)
+    max_float_m = st.slider("Max Float (M)", 5, 100, 30)
+    min_rvol = st.slider("Min RVOL (approx)", 1.0, 10.0, 3.0, step=0.5)
+    refresh_sec = st.slider("Refresh (seconds)", 10, 60, 20)
     
     if st.button("Clear List"):
-        st.session_state.qualified = []
+        if "qualified" in st.session_state:
+            st.session_state.qualified = []
         st.rerun()
 
-# Initialize session state for rolling list
+# Session State for rolling list
 if "qualified" not in st.session_state:
     st.session_state.qualified = []
 
-# === FUNCTIONS ===
 def get_top_gainers():
     url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={API_KEY}"
     try:
@@ -41,79 +39,78 @@ def get_news_title(symbol):
     url = f"https://financialmodelingprep.com/api/v3/stock_news?tickers={symbol}&limit=1&apikey={API_KEY}"
     try:
         data = requests.get(url, timeout=8).json()
-        return data[0]['title'] if data else "No recent news"
+        return data[0]['title'] if data else "No news"
     except:
         return "News unavailable"
 
-# === MAIN AUTO LOOP ===
+def play_sound():
+    st.components.v1.html("""
+        <audio autoplay>
+            <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg">
+        </audio>
+    """, height=0)
+
 placeholder = st.empty()
 
 while True:
     with placeholder.container():
-        st.caption(f"Last updated: {datetime.now().strftime('%H:%M:%S')} | Auto every {refresh_seconds}s")
+        st.caption(f"Last scan: {datetime.now().strftime('%H:%M:%S')} | Every {refresh_sec}s")
         
         df = get_top_gainers()
         
         if not df.empty:
-            # Apply current filters
-            current_matches = df[
+            candidates = df[
                 (df['changesPercentage'] >= min_gain) &
                 (df['price'].between(min_price, max_price))
             ].copy()
             
-            # Add new matches to the top of the rolling list
-            for _, row in current_matches.iterrows():
+            for _, row in candidates.iterrows():
                 symbol = row['symbol']
-                price = round(row['price'], 2)
-                change = round(row['changesPercentage'], 2)
-                volume = int(row['volume'])
-                
-                # Simple RVOL approximation (you can improve later with historical data)
-                rvol = round(volume / 500000, 1)   # rough proxy
-                
-                # Skip if already in list or doesn't meet RVOL/float
-                if any(item['Ticker'] == symbol for item in st.session_state.qualified):
+                if any(item.get('Ticker') == symbol for item in st.session_state.qualified):
                     continue
+                
+                # Rough RVOL
+                rvol = round(row['volume'] / 500000, 1)
                 if rvol < min_rvol:
                     continue
                 
-                # Get float (light check)
+                # Float check
                 try:
-                    float_data = requests.get(
-                        f"https://financialmodelingprep.com/api/v3/shares-float?symbol={symbol}&apikey={API_KEY}",
-                        timeout=6
-                    ).json()
-                    float_val = float_data[0].get('freeFloat', 999999999) / 1_000_000 if float_data else 999
+                    fdata = requests.get(f"https://financialmodelingprep.com/api/v3/shares-float?symbol={symbol}&apikey={API_KEY}", timeout=6).json()
+                    float_m = fdata[0].get('freeFloat', 999999999) / 1_000_000 if fdata else 999
                 except:
-                    float_val = 999
-                
-                if float_val > max_float_m:
+                    float_m = 999
+                if float_m > max_float_m:
                     continue
                 
-                news_title = get_news_title(symbol)
+                news = get_news_title(symbol)
                 
                 new_item = {
-                    "Ticker": symbol,
-                    "Price": price,
-                    "% Gain": change,
-                    "Volume": f"{volume:,}",
-                    "Float (M)": round(float_val, 1),
-                    "RVOL (approx)": rvol,
-                    "News Catalyst": news_title[:90] + "..." if len(news_title) > 90 else news_title,
+                    "Ticker": f"[{symbol}](https://finance.yahoo.com/quote/{symbol})",
+                    "Price": round(row['price'], 2),
+                    "% Gain": round(row['changesPercentage'], 2),
+                    "Volume": f"{int(row['volume']):,}",
+                    "Float (M)": round(float_m, 1),
+                    "RVOL": rvol,
+                    "News": news[:80] + "..." if len(news) > 80 else news,
                     "Time": datetime.now().strftime("%H:%M:%S")
                 }
                 
-                # Add to top of list
                 st.session_state.qualified.insert(0, new_item)
-            
-            # Keep only the last 20 entries (rolling effect)
-            st.session_state.qualified = st.session_state.qualified[:20]
+                
+                # Sound ping for strong moves
+                if row['changesPercentage'] >= 30:
+                    play_sound()
+                    st.success(f"🚨 STRONG PING: {symbol} +{new_item['% Gain']}%")
         
-        # Display the rolling table
+        # Trim list
+        st.session_state.qualified = st.session_state.qualified[:20]
+        
+        # Display
         if st.session_state.qualified:
             display_df = pd.DataFrame(st.session_state.qualified)
-            st.dataframe(display_df, use_container_width=True, height=600)
+            st.dataframe(display_df, use_container_width=True, height=650)
         else:
-            st.info("Waiting for stocks that match your current filters...")
+            st.info("Scanning... No matches yet with current filters.")
         
-        time.sleep(refresh_seconds)
+        time.sleep(refresh_sec)
