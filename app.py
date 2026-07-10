@@ -31,8 +31,8 @@ if "top_gainers_history" not in st.session_state:
 if "last_top_change" not in st.session_state:
     st.session_state.last_top_change = 0
 
-# Top Gainer Box
-top_box = st.empty()
+# #1 Gainer Box
+gainer_box = st.empty()
 
 # Filters
 with st.expander("📊 Filters", expanded=True):
@@ -128,22 +128,22 @@ while True:
         df = get_top_gainers()
         
         if not df.empty:
-            # Top Gainer Box
+            # #1 Gainer Box
             top = df.iloc[0]
             color = "lime" if top['changesPercentage'] > 0 else "red"
             flash_speed = "0.5s" if abs(top['changesPercentage'] - st.session_state.last_top_change) >= 10 else "5s"
-            top_box.markdown(f"""
+            gainer_box.markdown(f"""
             <div style="background-color: #1a1a1a; padding: 20px; border-radius: 10px; text-align: center; font-size: 3em; font-weight: bold; color: {color}; animation: flash {flash_speed} infinite;">
-                {top['symbol']} +{round(top['changesPercentage'], 1)}%
+                #1 Gainer: {top['symbol']} +{round(top['changesPercentage'], 1)}%
             </div>
             """, unsafe_allow_html=True)
             
             if abs(top['changesPercentage'] - st.session_state.last_top_change) >= 10:
-                play_sound()  # Bell sound for big move
+                play_sound()  # Bell sound
             
             st.session_state.last_top_change = top['changesPercentage']
             
-            # Voice for top gainer only
+            # Voice for top gainer
             speak(f"{top['symbol']} news catalyst" if "news" in get_news_title(top['symbol']).lower() else top['symbol'])
             
             # Top Gainers list
