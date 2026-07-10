@@ -31,6 +31,9 @@ if "top_gainers_history" not in st.session_state:
 if "last_top_change" not in st.session_state:
     st.session_state.last_top_change = 0
 
+# Top Gainer Box
+top_box = st.empty()
+
 # Filters
 with st.expander("📊 Filters", expanded=True):
     col1, col2, col3 = st.columns(3)
@@ -48,9 +51,6 @@ with st.expander("📊 Filters", expanded=True):
             st.session_state.top_gainers_history = pd.DataFrame()
             st.session_state.last_top_change = 0
             st.rerun()
-
-# Top Gainer Box
-top_box = st.empty()
 
 # Layout
 left_col, right_col = st.columns([2, 3])
@@ -128,7 +128,7 @@ while True:
         df = get_top_gainers()
         
         if not df.empty:
-            # Top Gainer Box
+            # Top Gainer Box with flashing
             top = df.iloc[0]
             color = "lime" if top['changesPercentage'] > 0 else "red"
             flash_speed = "0.5s" if abs(top['changesPercentage'] - st.session_state.last_top_change) >= 10 else "5s"
