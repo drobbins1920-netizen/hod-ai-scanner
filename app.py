@@ -64,7 +64,7 @@ with col_left:
     top_gainers_placeholder = st.empty()
 
 with col_right:
-    st.markdown('<div style="border: 2px solid #444; border-radius: 8px; padding: 10px;">🔍 Live HOD Scanner</div>', unsafe_allow_html=True)
+    st.markdown('<div style="border: 2px solid #444; border-radius: 8px; padding: 10px;">🔍 Live HOD Scanner (Top 10)</div>', unsafe_allow_html=True)
     scanner_placeholder = st.empty()
 
 # News Box
@@ -175,7 +175,7 @@ while True:
                     cols.append('volume')
                 st.dataframe(display_df[cols], use_container_width=True, height=400)
             
-            # Live HOD Scanner using batch quotes
+            # Live HOD Scanner (Top 10)
             with scanner_placeholder.container():
                 quotes_df = get_batch_quotes()
                 if not quotes_df.empty:
@@ -222,8 +222,8 @@ while True:
                         # Voice for scanner tickers
                         speak(f"{symbol}")
                 
-                st.session_state.qualified = st.session_state.qualified[:20]
-        
+                st.session_state.qualified = st.session_state.qualified[:10]  # Hold 10 lines
+            
         # Latest News
         with news_placeholder.container():
             news_df = get_latest_news()
