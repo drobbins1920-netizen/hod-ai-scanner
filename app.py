@@ -30,6 +30,8 @@ if "top_gainers_history" not in st.session_state:
     st.session_state.top_gainers_history = pd.DataFrame()
 if "last_top_change" not in st.session_state:
     st.session_state.last_top_change = 0
+if "daily_summary" not in st.session_state:
+    st.session_state.daily_summary = []
 
 # Top Gainer Box
 gainer_box = st.empty()
@@ -50,9 +52,10 @@ with st.expander("📊 Filters", expanded=True):
             st.session_state.stats = {"pings": 0, "strong": 0}
             st.session_state.top_gainers_history = pd.DataFrame()
             st.session_state.last_top_change = 0
+            st.session_state.daily_summary = []
             st.rerun()
 
-# Layout with outlined boxes
+# Layout
 left_col, right_col = st.columns([2, 3])
 
 with left_col:
@@ -107,9 +110,12 @@ Provide:
     except:
         return {"score": 7, "thesis": "Strong momentum detected."}
 
-def send_telegram(message):
+def send_telegram(message, chart_link=None):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
+    text = message
+    if chart_link:
+        text += f"\n\nChart: {chart_link}"
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}
     try:
         requests.post(url, json=payload, timeout=5)
     except:
@@ -128,7 +134,7 @@ while True:
         df = get_top_gainers()
         
         if not df.empty:
-            # #1 Gainer Box
+            # Top Gainer Box
             top = df.iloc[0]
             color = "lime" if top['changesPercentage'] > 0 else "red"
             flash_speed = "0.5s" if abs(top['changesPercentage'] - st.session_state.last_top_change) >= 10 else "5s"
@@ -194,9 +200,10 @@ while True:
                     if ai['score'] >= 8:
                         play_sound()
                         st.session_state.stats["strong"] += 1
-                        alert = f"🚨 GROK AI PING!\n{symbol} +{new_item['% Gain']}% (Score {ai['score']}/10)\n{ai['thesis']}\n{new_item['News']}"
+                        chart_link = f"https://finance.yahoo.com/quote/{symbol}"
+                        alert = f"🚨 GROK AI PING!\n{symbol} +{new_item['% Gain']}% (Score {ai['score']}/10)\n{ai['thesis']}\n{new_item['News']}\nChart: {chart_link}"
                         st.success(alert)
-                        send_telegram(alert)
+                        send_telegram(alert, chart_link)
                     
                     # Voice for scanner tickers
                     speak(f"{symbol} news catalyst" if "news" in news.lower() else symbol)
