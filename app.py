@@ -36,6 +36,8 @@ if "last_news" not in st.session_state:
     st.session_state.last_news = []
 if "use_webull" not in st.session_state:
     st.session_state.use_webull = False
+if "webull_data" not in st.session_state:
+    st.session_state.webull_data = pd.DataFrame()
 
 # #1 Gainer Box
 gainer_box = st.empty()
@@ -94,19 +96,6 @@ def get_top_gainers():
     except:
         return pd.DataFrame()
 
-def get_batch_quotes():
-    url = f"https://financialmodelingprep.com/stable/batch-exchange-quote?exchange=NASDAQ&apikey={FMP_API_KEY}"
-    try:
-        response = requests.get(url, timeout=15)
-        data = response.json()
-        if isinstance(data, list):
-            df = pd.DataFrame(data)
-        else:
-            df = pd.DataFrame()
-        return df
-    except:
-        return pd.DataFrame()
-
 def get_latest_news():
     url = f"https://financialmodelingprep.com/stable/news/stock-latest?limit=10&apikey={FMP_API_KEY}"
     try:
@@ -152,16 +141,47 @@ def play_sound():
 def speak(text):
     st.components.v1.html(f'<script>speechSynthesis.speak(new SpeechSynthesisUtterance("{text}"));</script>', height=0)
 
-# Webull WebSocket (placeholder - needs proper setup)
-def on_webull_message(ws, message):
-    st.write("Webull message:", message)  # For testing
+# Webull WebSocket
+def on_message(ws, message):
+    try:
+        data = json.loads(message)
+        if 'data' in data:
+            df = pd.DataFrame(data['data'])
+            st.session_state.webull_data = df
+            st.rerun()
+    except:
+        pass
+
+def on_error(ws, error):
+    st.error(f"Webull error: {error}")
+
+def on_close(ws, close_status_code, close_msg):
+    st.warning("Webull connection closed")
+
+def on_open(ws):
+    st.success("Webull WebSocket connected")
+    # Subscribe to market data
+    subscribe_msg = {
+        "action": "subscribe",
+        "params": {
+            "symbols": "AAPL,TSLA,NVDA",
+            "fields": "last,change,volume"
+        }
+    }
+    ws.send(json.dumps(subscribe_msg))
 
 def start_webull_ws():
     if st.session_state.use_webull:
-        ws = websocket.WebSocketApp("wss://api.webull.com/ws", on_message=on_webull_message)
+        ws = websocket.WebSocketApp(
+            "wss://api.webull.com/ws",
+            on_open=on_open,
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close
+        )
         ws.run_forever()
 
-# Start Webull in thread if enabled
+# Start Webull in background
 if st.session_state.use_webull:
     threading.Thread(target=start_webull_ws, daemon=True).start()
 
@@ -198,7 +218,10 @@ while True:
             
             # Live HOD Scanner
             with scanner_placeholder.container():
-                quotes_df = get_batch_quotes()
+                if st.session_state.use_webull and not st.session_state.webull_data.empty:
+                    quotes_df = st.session_state.webull_data
+                else:
+                    quotes_df = get_batch_quotes()
                 if not quotes_df.empty:
                     candidates = quotes_df[
                         (quotes_df.get('change', 0) >= min_gain) &
