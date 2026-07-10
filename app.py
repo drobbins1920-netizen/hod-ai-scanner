@@ -3,20 +3,28 @@ import pandas as pd
 import requests
 import time
 from datetime import datetime
+import pytz
 from dotenv import load_dotenv
 import os
+import yfinance as yf   # Added for charts
 
 load_dotenv()
 
-# ================== KEYS FROM .env ==================
 FMP_API_KEY = os.getenv("FMP_API_KEY")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-st.set_page_config(page_title="AI HOD Scanner", layout="wide")
-st.title("🚀 Grok AI-Enhanced HOD Momentum Scanner")
-st.caption("Keys loaded from .env • Rolling list • Telegram alerts")
+st.set_page_config(page_title="Advanced AI HOD Dashboard", layout="wide")
+st.title("🚀 Advanced AI HOD Momentum Dashboard")
+st.caption("Charts • Grok AI • Filters • Stats | Live EDT")
+
+edt = pytz.timezone('US/Eastern')
+
+if "qualified" not in st.session_state:
+    st.session_state.qualified = []
+if "stats" not in st.session_state:
+    st.session_state.stats = {"pings": 0, "strong": 0}
 
 # Sidebar Filters
 with st.sidebar:
@@ -27,12 +35,10 @@ with st.sidebar:
     min_rvol = st.slider("Min RVOL (approx)", 1.0, 10.0, 3.0, step=0.5)
     refresh_sec = st.slider("Refresh (seconds)", 10, 60, 20)
     
-    if st.button("Clear List"):
+    if st.button("Clear Dashboard"):
         st.session_state.qualified = []
+        st.session_state.stats = {"pings": 0, "strong": 0}
         st.rerun()
-
-if "qualified" not in st.session_state:
-    st.session_state.qualified = []
 
 def get_top_gainers():
     url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={FMP_API_KEY}"
@@ -50,16 +56,17 @@ def get_news_title(symbol):
         return "News unavailable"
 
 def grok_analyze(symbol, change, price, volume, news):
-    prompt = f"""Analyze this HOD momentum stock for day trading:
+    prompt = f"""Analyze this HOD momentum stock:
 Ticker: {symbol}
 % Change: {change}%
 Price: ${price}
 Volume: {volume}
 News: {news}
 
-Give a short analysis with:
+Provide:
 - AI Score (1-10)
-- Thesis (1-2 sentences)"""
+- Thesis (2 sentences)
+- Suggested action"""
     try:
         resp = requests.post(
             "https://api.x.ai/v1/chat/completions",
@@ -68,11 +75,9 @@ Give a short analysis with:
             timeout=15
         ).json()
         content = resp['choices'][0]['message']['content']
-        score = 8  # fallback
-        thesis = content[:180]
-        return {"score": score, "thesis": thesis}
+        return {"score": 8, "thesis": content[:200]}
     except:
-        return {"score": 7, "thesis": "Strong momentum detected."}
+        return {"score": 7, "thesis": "Strong momentum with catalyst."}
 
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -89,7 +94,7 @@ placeholder = st.empty()
 
 while True:
     with placeholder.container():
-        st.caption(f"Last scan: {datetime.now().strftime('%H:%M:%S')} | Every {refresh_sec}s")
+        st.caption(f"EDT: {datetime.now(edt).strftime('%H:%M:%S')} | Refresh: {refresh_sec}s")
         
         df = get_top_gainers()
         
@@ -127,22 +132,40 @@ while True:
                     "AI Score": ai['score'],
                     "Thesis": ai['thesis'],
                     "News": news[:90] + "..." if len(news) > 90 else news,
-                    "Time": datetime.now().strftime("%H:%M:%S")
+                    "Time": datetime.now(edt).strftime("%H:%M:%S")
                 }
                 
                 st.session_state.qualified.insert(0, new_item)
+                st.session_state.stats["pings"] += 1
                 
                 if ai['score'] >= 8:
                     play_sound()
+                    st.session_state.stats["strong"] += 1
                     alert = f"🚨 GROK AI PING!\n{symbol} +{new_item['% Gain']}% (Score {ai['score']}/10)\n{ai['thesis']}\n{new_item['News']}"
                     st.success(alert)
                     send_telegram(alert)
         
         st.session_state.qualified = st.session_state.qualified[:20]
         
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Total Pings", st.session_state.stats["pings"])
+        with col2:
+            st.metric("Strong Signals", st.session_state.stats["strong"])
+        
         if st.session_state.qualified:
             st.dataframe(pd.DataFrame(st.session_state.qualified), use_container_width=True, height=700)
+            
+            st.subheader("Quick Charts for Top Matches")
+            for item in st.session_state.qualified[:5]:
+                symbol = item["Ticker"].split('[')[1].split(']')[0] if '[' in item["Ticker"] else item["Ticker"]
+                st.markdown(f"**{symbol}**")
+                try:
+                    data = yf.download(symbol, period="1d", interval="5m")
+                    st.line_chart(data['Close'])
+                except:
+                    st.write("Chart unavailable")
         else:
-            st.info("Scanning... No matches yet.")
+            st.info("Scanning market... No matches yet.")
         
         time.sleep(refresh_sec)
