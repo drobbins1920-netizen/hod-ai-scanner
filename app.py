@@ -43,6 +43,7 @@ with st.expander("📊 Filters", expanded=True):
         if st.button("Clear Dashboard"):
             st.session_state.qualified = []
             st.session_state.stats = {"pings": 0, "strong": 0}
+            st.session_state.top_gainers_history = pd.DataFrame()
             st.rerun()
 
 # Layout
@@ -118,9 +119,12 @@ while True:
         df = get_top_gainers()
         
         if not df.empty:
-            # Top Gainers (keep history for session)
+            # Update Top Gainers History
+            st.session_state.top_gainers_history = pd.concat([st.session_state.top_gainers_history, df]).drop_duplicates(subset=['symbol']).head(15)
+            
+            # Top Gainers
             with top_gainers_placeholder.container():
-                st.dataframe(df.head(15)[['symbol', 'price', 'changesPercentage', 'volume']], use_container_width=True, height=400)
+                st.dataframe(st.session_state.top_gainers_history[['symbol', 'price', 'changesPercentage', 'volume']], use_container_width=True, height=400)
             
             # Scanner
             with scanner_placeholder.container():
