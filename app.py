@@ -31,7 +31,7 @@ if "top_gainers_history" not in st.session_state:
 if "last_top_change" not in st.session_state:
     st.session_state.last_top_change = 0
 
-# #1 Gainer Box
+# Top Gainer Box
 gainer_box = st.empty()
 
 # Filters
@@ -52,7 +52,7 @@ with st.expander("📊 Filters", expanded=True):
             st.session_state.last_top_change = 0
             st.rerun()
 
-# Layout
+# Layout with outlined boxes
 left_col, right_col = st.columns([2, 3])
 
 with left_col:
@@ -139,7 +139,7 @@ while True:
             """, unsafe_allow_html=True)
             
             if abs(top['changesPercentage'] - st.session_state.last_top_change) >= 10:
-                play_sound()  # Bell sound
+                play_sound()
             
             st.session_state.last_top_change = top['changesPercentage']
             
