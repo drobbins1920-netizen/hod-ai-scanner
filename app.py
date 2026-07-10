@@ -70,6 +70,7 @@ charts_placeholder = st.empty()
 placeholder = st.empty()
 
 def get_top_gainers():
+    st.write("Gainers fetched:", len(df))
     url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={FMP_API_KEY}"
     try:
         return pd.DataFrame(requests.get(url, timeout=15).json())
