@@ -134,13 +134,13 @@ while True:
         df = get_top_gainers()
         
         if not df.empty:
-            # #1 Gainer Box (flashing + bell on 10% change or new ticker)
+            # #1 Gainer Box
             top = df.iloc[0]
             color = "lime" if top.get('changesPercentage', 0) > 0 else "red"
             flash_speed = "0.5s" if abs(top.get('changesPercentage', 0) - st.session_state.last_top_change) >= 10 else "5s"
             gainer_box.markdown(f"""
             <div style="background-color: #1a1a1a; padding: 20px; border: 2px solid #444; border-radius: 10px; text-align: center; font-size: 3em; font-weight: bold; color: {color}; animation: flash {flash_speed} infinite;">
-                #1 Gainer: {top['symbol']} +{round(top.get('changesPercentage', 0), 1)}%
+                #1 Gainer: {top.get('symbol', 'N/A')} +{round(top.get('changesPercentage', 0), 1)}%
             </div>
             """, unsafe_allow_html=True)
             
@@ -151,8 +151,8 @@ while True:
             
             # Top Gainers list (no Name, green %)
             with top_gainers_placeholder.container():
-                display_df = df.head(15)[['symbol', 'price', 'changesPercentage', 'volume']].copy()
-                display_df['% Change'] = display_df['changesPercentage'].apply(lambda x: f"{x:.2f}%")
+                display_df = df.head(15).copy()
+                display_df['% Change'] = display_df.get('changesPercentage', 0).apply(lambda x: f"{x:.2f}%")
                 st.dataframe(display_df[['symbol', 'price', '% Change', 'volume']], use_container_width=True, height=400)
             
             # Scanner
@@ -163,7 +163,7 @@ while True:
                 ].copy()
                 
                 for _, row in candidates.iterrows():
-                    symbol = row['symbol']
+                    symbol = row.get('symbol')
                     if any(item.get('Ticker') == symbol for item in st.session_state.qualified):
                         continue
                     
@@ -197,7 +197,7 @@ while True:
                         st.success(alert)
                         send_telegram(alert)
                     
-                    # Voice for scanner tickers only
+                    # Voice for scanner tickers
                     speak(f"{symbol} news catalyst" if "news" in news.lower() else symbol)
             
             st.session_state.qualified = st.session_state.qualified[:20]
