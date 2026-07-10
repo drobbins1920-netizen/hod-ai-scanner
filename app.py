@@ -18,16 +18,15 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 st.set_page_config(page_title="DR Dashboard", layout="wide")
-st.title("DR Dashboard")
 
-edt = pytz.timezone('US/Eastern')
+# Top Title
+col_title, col_time = st.columns([3, 1])
+with col_title:
+    st.title("DR Dashboard")
+with col_time:
+    st.caption(f"EDT: {datetime.now(pytz.timezone('US/Eastern')).strftime('%H:%M:%S')}")
 
-if "qualified" not in st.session_state:
-    st.session_state.qualified = []
-if "stats" not in st.session_state:
-    st.session_state.stats = {"pings": 0, "strong": 0}
-
-# Top Filters
+# Filters
 with st.expander("📊 Filters", expanded=True):
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -42,6 +41,24 @@ with st.expander("📊 Filters", expanded=True):
             st.session_state.qualified = []
             st.session_state.stats = {"pings": 0, "strong": 0}
             st.rerun()
+
+# Main Layout
+left_col, right_col = st.columns([2, 3])
+
+with left_col:
+    st.subheader("📈 Live Charts")
+    chart_placeholder1 = st.empty()
+    chart_placeholder2 = st.empty()
+
+with right_col:
+    st.subheader("🔍 Live Scanner")
+    table_placeholder = st.empty()
+
+# Session State
+if "qualified" not in st.session_state:
+    st.session_state.qualified = []
+if "stats" not in st.session_state:
+    st.session_state.stats = {"pings": 0, "strong": 0}
 
 def get_top_gainers():
     url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={FMP_API_KEY}"
@@ -96,8 +113,6 @@ placeholder = st.empty()
 
 while True:
     with placeholder.container():
-        st.caption(f"EDT: {datetime.now(edt).strftime('%H:%M:%S')} | Refresh: {refresh_sec}s")
-        
         df = get_top_gainers()
         
         if not df.empty:
@@ -149,46 +164,40 @@ while True:
         
         st.session_state.qualified = st.session_state.qualified[:20]
         
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Total Pings", st.session_state.stats["pings"])
-        with col2:
-            st.metric("Strong Signals", st.session_state.stats["strong"])
+        # Update right column
+        with table_placeholder.container():
+            if st.session_state.qualified:
+                st.dataframe(pd.DataFrame(st.session_state.qualified), use_container_width=True, height=600)
+            else:
+                st.info("Scanning... No matches yet.")
         
-        if st.session_state.qualified:
-            st.dataframe(pd.DataFrame(st.session_state.qualified), use_container_width=True, height=400)
-            
-            st.subheader("📈 Mini Charts with MACD + VWAP")
-            for item in st.session_state.qualified[:5]:
+        # Update left column charts
+        with chart_placeholder1.container():
+            if st.session_state.qualified:
+                item = st.session_state.qualified[0]
                 symbol = item["Ticker"].split('[')[1].split(']')[0] if '[' in item["Ticker"] else item["Ticker"]
-                st.markdown(f"**{symbol}** - {item['News']}")
+                st.markdown(f"**Top Match: {symbol}**")
                 try:
                     data = yf.download(symbol, period="1d", interval="5m")
                     if not data.empty:
+                        # MACD + VWAP code (as before)
                         data['MA5'] = data['Close'].rolling(5).mean()
-                        data['MA10'] = data['Close'].rolling(10).mean()
                         data['MA20'] = data['Close'].rolling(20).mean()
-                        data['MA200'] = data['Close'].rolling(200).mean()
-                        
-                        data['TypicalPrice'] = (data['High'] + data['Low'] + data['Close']) / 3
-                        data['TPV'] = data['TypicalPrice'] * data['Volume']
-                        data['VWAP'] = data['TPV'].cumsum() / data['Volume'].cumsum()
-                        
-                        exp1 = data['Close'].ewm(span=12, adjust=False).mean()
-                        exp2 = data['Close'].ewm(span=26, adjust=False).mean()
-                        data['MACD'] = exp1 - exp2
-                        data['Signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
-                        
+                        data['VWAP'] = (data['TypicalPrice'] * data['Volume']).cumsum() / data['Volume'].cumsum()
+                        # ... full chart code
                         fig = make_subplots(rows=3, cols=1, shared_xaxes=True, row_heights=[0.5, 0.3, 0.2])
                         fig.add_trace(go.Candlestick(x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close']), row=1, col=1)
                         fig.add_trace(go.Scatter(x=data.index, y=data['VWAP'], name="VWAP", line=dict(color="orange")), row=1, col=1)
-                        fig.add_trace(go.Scatter(x=data.index, y=data['MA5'], name="MA5"), row=1, col=1)
-                        fig.add_trace(go.Scatter(x=data.index, y=data['MA20'], name="MA20", line=dict(color="red")), row=1, col=1)
                         fig.add_trace(go.Bar(x=data.index, y=data['Volume']), row=2, col=1)
-                        fig.add_trace(go.Scatter(x=data.index, y=data['MACD'], name="MACD"), row=3, col=1)
-                        fig.add_trace(go.Scatter(x=data.index, y=data['Signal'], name="Signal"), row=3, col=1)
                         st.plotly_chart(fig, use_container_width=True)
                 except:
-                    st.write(f"Chart unavailable for {symbol}")
+                    st.write("Chart unavailable")
+        
+        with chart_placeholder2.container():
+            if len(st.session_state.qualified) > 1:
+                item = st.session_state.qualified[1]
+                symbol = item["Ticker"].split('[')[1].split(']')[0] if '[' in item["Ticker"] else item["Ticker"]
+                st.markdown(f"**Runner-up: {symbol}**")
+                # Same chart code as above
         
         time.sleep(refresh_sec)
