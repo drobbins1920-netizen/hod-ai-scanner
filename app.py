@@ -140,7 +140,7 @@ while True:
         
         df = get_top_gainers()
         
-        if not df.empty:
+        if not df.empty and 'changesPercentage' in df.columns:
             # #1 Gainer Box
             top = df.iloc[0]
             color = "lime" if top['changesPercentage'] > 0 else "red"
