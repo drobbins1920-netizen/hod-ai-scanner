@@ -17,9 +17,8 @@ GROK_API_KEY = os.getenv("GROK_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-st.set_page_config(page_title="AI HOD Dashboard", layout="wide")
-st.title("🚀 AI HOD Momentum Dashboard with Charts")
-st.caption("MACD + VWAP • Grok AI • Telegram")
+st.set_page_config(page_title="DR Dashboard", layout="wide")
+st.title("DR Dashboard")
 
 edt = pytz.timezone('US/Eastern')
 
@@ -28,18 +27,21 @@ if "qualified" not in st.session_state:
 if "stats" not in st.session_state:
     st.session_state.stats = {"pings": 0, "strong": 0}
 
-with st.sidebar:
-    st.header("Live Filters")
-    min_gain = st.slider("Min % Gain", 5, 100, 20)
-    min_price, max_price = st.slider("Price Range ($)", 0.5, 50.0, (1.0, 20.0), step=0.5)
-    max_float_m = st.slider("Max Float (M)", 5, 100, 30)
-    min_rvol = st.slider("Min RVOL", 1.0, 10.0, 3.0, step=0.5)
-    refresh_sec = st.slider("Refresh (seconds)", 10, 60, 20)
-    
-    if st.button("Clear Dashboard"):
-        st.session_state.qualified = []
-        st.session_state.stats = {"pings": 0, "strong": 0}
-        st.rerun()
+# Top Filters
+with st.expander("📊 Filters", expanded=True):
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        min_gain = st.slider("Min % Gain", 5, 100, 20)
+        min_price, max_price = st.slider("Price Range ($)", 0.5, 50.0, (1.0, 20.0), step=0.5)
+    with col2:
+        max_float_m = st.slider("Max Float (M)", 5, 100, 30)
+        min_rvol = st.slider("Min RVOL", 1.0, 10.0, 3.0, step=0.5)
+    with col3:
+        refresh_sec = st.slider("Refresh (seconds)", 10, 60, 20)
+        if st.button("Clear Dashboard"):
+            st.session_state.qualified = []
+            st.session_state.stats = {"pings": 0, "strong": 0}
+            st.rerun()
 
 def get_top_gainers():
     url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={FMP_API_KEY}"
@@ -156,10 +158,10 @@ while True:
         if st.session_state.qualified:
             st.dataframe(pd.DataFrame(st.session_state.qualified), use_container_width=True, height=400)
             
-            st.subheader("Live Mini Charts with MACD + VWAP")
+            st.subheader("📈 Mini Charts with MACD + VWAP")
             for item in st.session_state.qualified[:5]:
                 symbol = item["Ticker"].split('[')[1].split(']')[0] if '[' in item["Ticker"] else item["Ticker"]
-                st.markdown(f"**{symbol}**")
+                st.markdown(f"**{symbol}** - {item['News']}")
                 try:
                     data = yf.download(symbol, period="1d", interval="5m")
                     if not data.empty:
