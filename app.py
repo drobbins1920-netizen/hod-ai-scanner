@@ -83,8 +83,20 @@ def get_top_gainers():
         else:
             df = pd.DataFrame()
         return df
-    except Exception as e:
-        st.error(f"Error: {e}")
+    except:
+        return pd.DataFrame()
+
+def get_batch_quotes():
+    url = f"https://financialmodelingprep.com/stable/batch-exchange-quote?exchange=NASDAQ&apikey={FMP_API_KEY}"
+    try:
+        response = requests.get(url, timeout=15)
+        data = response.json()
+        if isinstance(data, list):
+            df = pd.DataFrame(data)
+        else:
+            df = pd.DataFrame()
+        return df
+    except:
         return pd.DataFrame()
 
 def get_latest_news():
@@ -163,52 +175,54 @@ while True:
                     cols.append('volume')
                 st.dataframe(display_df[cols], use_container_width=True, height=400)
             
-            # Live HOD Scanner (relaxed)
+            # Live HOD Scanner using batch quote
             with scanner_placeholder.container():
-                candidates = df[
-                    (df.get('changesPercentage', 0) >= min_gain) &
-                    (df.get('price', 0).between(min_price, max_price))
-                ].copy()
+                quotes_df = get_batch_quotes()
+                if not quotes_df.empty:
+                    candidates = quotes_df[
+                        (quotes_df.get('change', 0) >= min_gain) &
+                        (quotes_df.get('price', 0).between(min_price, max_price))
+                    ].copy()
+                    
+                    for _, row in candidates.iterrows():
+                        symbol = row.get('symbol')
+                        if any(item.get('Ticker') == symbol for item in st.session_state.qualified):
+                            continue
+                        
+                        rvol = round(row.get('volume', 0) / 500000, 1)
+                        if rvol < min_rvol: continue
+                        
+                        float_m = 999
+                        news = "No news"
+                        ai = grok_analyze(symbol, row.get('change', 0), row.get('price', 0), row.get('volume', 0), news)
+                        
+                        new_item = {
+                            "Ticker": f"[{symbol}](https://finance.yahoo.com/quote/{symbol})",
+                            "Price": round(row.get('price', 0), 2),
+                            "% Gain": round(row.get('change', 0), 2),
+                            "Volume": f"{int(row.get('volume', 0)):,}",
+                            "Float (M)": round(float_m, 1),
+                            "RVOL": rvol,
+                            "AI Score": ai['score'],
+                            "Thesis": ai['thesis'],
+                            "News": news,
+                            "Time": datetime.now(edt).strftime("%H:%M:%S")
+                        }
+                        
+                        st.session_state.qualified.insert(0, new_item)
+                        st.session_state.stats["pings"] += 1
+                        
+                        if ai['score'] >= 8:
+                            play_sound()
+                            st.session_state.stats["strong"] += 1
+                            alert = f"🚨 GROK AI PING!\n{symbol} +{new_item['% Gain']}% (Score {ai['score']}/10)\n{ai['thesis']}"
+                            st.success(alert)
+                            send_telegram(alert)
+                        
+                        # Voice for scanner tickers
+                        speak(f"{symbol}")
                 
-                for _, row in candidates.iterrows():
-                    symbol = row.get('symbol')
-                    if any(item.get('Ticker') == symbol for item in st.session_state.qualified):
-                        continue
-                    
-                    rvol = round(row.get('volume', 0) / 500000, 1)
-                    if rvol < min_rvol: continue
-                    
-                    float_m = 999
-                    news = get_news_title(symbol) if 'get_news_title' in globals() else "No news"
-                    ai = grok_analyze(symbol, row.get('changesPercentage', 0), row.get('price', 0), row.get('volume', 0), news)
-                    
-                    new_item = {
-                        "Ticker": f"[{symbol}](https://finance.yahoo.com/quote/{symbol})",
-                        "Price": round(row.get('price', 0), 2),
-                        "% Gain": round(row.get('changesPercentage', 0), 2),
-                        "Volume": f"{int(row.get('volume', 0)):,}",
-                        "Float (M)": round(float_m, 1),
-                        "RVOL": rvol,
-                        "AI Score": ai['score'],
-                        "Thesis": ai['thesis'],
-                        "News": news[:90] + "..." if len(news) > 90 else news,
-                        "Time": datetime.now(edt).strftime("%H:%M:%S")
-                    }
-                    
-                    st.session_state.qualified.insert(0, new_item)
-                    st.session_state.stats["pings"] += 1
-                    
-                    if ai['score'] >= 8:
-                        play_sound()
-                        st.session_state.stats["strong"] += 1
-                        alert = f"🚨 GROK AI PING!\n{symbol} +{new_item['% Gain']}% (Score {ai['score']}/10)\n{ai['thesis']}\n{new_item['News']}"
-                        st.success(alert)
-                        send_telegram(alert)
-                    
-                    # Voice for scanner tickers
-                    speak(f"{symbol} news catalyst" if "news" in news.lower() else symbol)
-            
-            st.session_state.qualified = st.session_state.qualified[:20]
+                st.session_state.qualified = st.session_state.qualified[:20]
         
         # Latest News
         with news_placeholder.container():
