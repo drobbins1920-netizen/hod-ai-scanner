@@ -76,11 +76,14 @@ def get_top_gainers():
         st.write("Status:", response.status_code)
         data = response.json()
         st.write("Data type:", type(data))
-        df = pd.DataFrame(data)
+        if isinstance(data, list):
+            df = pd.DataFrame(data)
+        else:
+            df = pd.DataFrame(list(data.items())) if isinstance(data, dict) else pd.DataFrame()
         st.write("DataFrame shape:", df.shape)
         if not df.empty:
             st.success(f"Fetched {len(df)} gainers")
-            st.write(df.head(5)[['symbol', 'price', 'changesPercentage']])
+            st.write(df.head(5))
         return df
     except Exception as e:
         st.error(f"Error: {e}")
