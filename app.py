@@ -96,6 +96,19 @@ def get_top_gainers():
     except:
         return pd.DataFrame()
 
+def get_batch_quotes():
+    url = f"https://financialmodelingprep.com/stable/batch-exchange-quote?exchange=NASDAQ&apikey={FMP_API_KEY}"
+    try:
+        response = requests.get(url, timeout=15)
+        data = response.json()
+        if isinstance(data, list):
+            df = pd.DataFrame(data)
+        else:
+            df = pd.DataFrame()
+        return df
+    except:
+        return pd.DataFrame()
+
 def get_latest_news():
     url = f"https://financialmodelingprep.com/stable/news/stock-latest?limit=10&apikey={FMP_API_KEY}"
     try:
@@ -146,9 +159,7 @@ def on_message(ws, message):
     try:
         data = json.loads(message)
         if 'data' in data:
-            df = pd.DataFrame(data['data'])
-            st.session_state.webull_data = df
-            st.rerun()
+            st.session_state.webull_data = pd.DataFrame(data['data'])
     except:
         pass
 
@@ -160,11 +171,10 @@ def on_close(ws, close_status_code, close_msg):
 
 def on_open(ws):
     st.success("Webull WebSocket connected")
-    # Subscribe to market data
     subscribe_msg = {
         "action": "subscribe",
         "params": {
-            "symbols": "AAPL,TSLA,NVDA",
+            "symbols": "AAPL,TSLA,NVDA,AMD,SMCI",
             "fields": "last,change,volume"
         }
     }
