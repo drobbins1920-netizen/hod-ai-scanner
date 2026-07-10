@@ -149,11 +149,14 @@ while True:
             
             st.session_state.last_top_change = top.get('changesPercentage', 0)
             
-            # Top Gainers list
+            # Top Gainers list (robust columns)
             with top_gainers_placeholder.container():
                 display_df = df.head(15).copy()
                 display_df['% Change'] = display_df.get('changesPercentage', 0).apply(lambda x: f"{x:.2f}%")
-                st.dataframe(display_df[['symbol', 'price', '% Change', 'volume']], use_container_width=True, height=400)
+                cols = ['symbol', 'price', '% Change']
+                if 'volume' in display_df.columns:
+                    cols.append('volume')
+                st.dataframe(display_df[cols], use_container_width=True, height=400)
             
             # Scanner
             with scanner_placeholder.container():
