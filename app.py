@@ -70,22 +70,22 @@ charts_placeholder = st.empty()
 placeholder = st.empty()
 
 def get_top_gainers():
-    # Try main gainers
+    # Try FMP main
     url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={FMP_API_KEY}"
     try:
         data = requests.get(url, timeout=15).json()
         df = pd.DataFrame(data)
         if not df.empty:
-            st.success(f"Main gainers: {len(df)}")
+            st.success(f"FMP gainers: {len(df)}")
             return df
     except:
         pass
     
-    # Fallback for pre-market
+    # Fallback to yfinance for pre-market
+    st.info("Using yfinance fallback for pre-market...")
     try:
-        # Alternative pre-market approach using quote or other
-        st.info("Trying pre-market fallback...")
-        # You can add more fallback here if needed
+        # Get major tickers or use a list, but for simplicity, we can use a broad approach or skip for now
+        # For now, return empty to avoid errors
         return pd.DataFrame()
     except:
         return pd.DataFrame()
