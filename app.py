@@ -4,11 +4,16 @@ import requests
 import time
 from datetime import datetime
 
+# ================== CONFIG ==================
 API_KEY = "Q36YW4o2v1XwkQHhj5zVxbI3C6vDjgGC"
 
-st.set_page_config(page_title="Live HOD Scanner", layout="wide")
-st.title("🚀 Live HOD Momentum Scanner")
-st.caption("Newest at top • Click tickers for charts • Sound on strong matches")
+# Telegram Setup (get these from BotFather and your chat)
+TELEGRAM_BOT_TOKEN = "8788067448:AAFboEZAZEOLYXxZss2Jk_ZWp83rV26eoHA"
+TELEGRAM_CHAT_ID = "7680581613"   # Your personal chat ID with the bot
+
+st.set_page_config(page_title="Live HOD Scanner + Telegram", layout="wide")
+st.title("🚀 Live HOD Momentum Scanner + Telegram Alerts")
+st.caption("Newest at top • Clickable tickers • Sound + Telegram pings")
 
 # Sidebar Filters
 with st.sidebar:
@@ -20,11 +25,10 @@ with st.sidebar:
     refresh_sec = st.slider("Refresh (seconds)", 10, 60, 20)
     
     if st.button("Clear List"):
-        if "qualified" in st.session_state:
-            st.session_state.qualified = []
+        st.session_state.qualified = []
         st.rerun()
 
-# Session State for rolling list
+# Session State
 if "qualified" not in st.session_state:
     st.session_state.qualified = []
 
@@ -43,12 +47,16 @@ def get_news_title(symbol):
     except:
         return "News unavailable"
 
+def send_telegram(message):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
+    try:
+        requests.post(url, json=payload, timeout=5)
+    except:
+        pass
+
 def play_sound():
-    st.components.v1.html("""
-        <audio autoplay>
-            <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg">
-        </audio>
-    """, height=0)
+    st.components.v1.html('<audio autoplay><source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg"></audio>', height=0)
 
 placeholder = st.empty()
 
@@ -69,19 +77,16 @@ while True:
                 if any(item.get('Ticker') == symbol for item in st.session_state.qualified):
                     continue
                 
-                # Rough RVOL
                 rvol = round(row['volume'] / 500000, 1)
-                if rvol < min_rvol:
-                    continue
+                if rvol < min_rvol: continue
                 
-                # Float check
+                # Float
                 try:
                     fdata = requests.get(f"https://financialmodelingprep.com/api/v3/shares-float?symbol={symbol}&apikey={API_KEY}", timeout=6).json()
                     float_m = fdata[0].get('freeFloat', 999999999) / 1_000_000 if fdata else 999
                 except:
                     float_m = 999
-                if float_m > max_float_m:
-                    continue
+                if float_m > max_float_m: continue
                 
                 news = get_news_title(symbol)
                 
@@ -98,19 +103,18 @@ while True:
                 
                 st.session_state.qualified.insert(0, new_item)
                 
-                # Sound ping for strong moves
-                if row['changesPercentage'] >= 30:
+                # Strong match → Sound + Telegram
+                if row['changesPercentage'] >= 25:
                     play_sound()
-                    st.success(f"🚨 STRONG PING: {symbol} +{new_item['% Gain']}%")
+                    alert_msg = f"🚨 HOD PING!\n{symbol} +{new_item['% Gain']}% @ ${new_item['Price']}\n{new_item['News']}"
+                    st.success(alert_msg)
+                    send_telegram(alert_msg)
         
-        # Trim list
         st.session_state.qualified = st.session_state.qualified[:20]
         
-        # Display
         if st.session_state.qualified:
-            display_df = pd.DataFrame(st.session_state.qualified)
-            st.dataframe(display_df, use_container_width=True, height=650)
+            st.dataframe(pd.DataFrame(st.session_state.qualified), use_container_width=True, height=650)
         else:
-            st.info("Scanning... No matches yet with current filters.")
+            st.info("Scanning market... No matches yet.")
         
         time.sleep(refresh_sec)
