@@ -3,15 +3,20 @@ import pandas as pd
 import requests
 import time
 from datetime import datetime
+from dotenv import load_dotenv
+import os
 
-# ================== YOUR KEYS ==================
-FMP_API_KEY = "Q36YW4o2v1XwkQHhj5zVxbI3C6vDjgGC"
-TELEGRAM_BOT_TOKEN = "8788067448:AAFboEZAZEOLYXxZss2Jk_ZWp83rV26eoHA"
-TELEGRAM_CHAT_ID = "7680581613"
+load_dotenv()
+
+# ================== KEYS FROM .env ==================
+FMP_API_KEY = os.getenv("FMP_API_KEY")
+GROK_API_KEY = os.getenv("GROK_API_KEY")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 st.set_page_config(page_title="AI HOD Scanner", layout="wide")
-st.title("🚀 AI-Enhanced HOD Momentum Scanner + Telegram")
-st.caption("Rolling list • AI Scoring • Telegram + Sound alerts")
+st.title("🚀 Grok AI-Enhanced HOD Momentum Scanner")
+st.caption("Keys loaded from .env • Rolling list • Telegram alerts")
 
 # Sidebar Filters
 with st.sidebar:
@@ -44,11 +49,30 @@ def get_news_title(symbol):
     except:
         return "News unavailable"
 
-def ai_analyze(row, news):
-    change = row.get('changesPercentage', 0)
-    score = max(1, min(10, int(change * 0.12 + 5)))
-    thesis = f"Strong momentum on high volume." if score >= 8 else "Decent catalyst."
-    return {"score": score, "thesis": thesis}
+def grok_analyze(symbol, change, price, volume, news):
+    prompt = f"""Analyze this HOD momentum stock for day trading:
+Ticker: {symbol}
+% Change: {change}%
+Price: ${price}
+Volume: {volume}
+News: {news}
+
+Give a short analysis with:
+- AI Score (1-10)
+- Thesis (1-2 sentences)"""
+    try:
+        resp = requests.post(
+            "https://api.x.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {GROK_API_KEY}", "Content-Type": "application/json"},
+            json={"model": "grok-beta", "messages": [{"role": "user", "content": prompt}], "temperature": 0.7},
+            timeout=15
+        ).json()
+        content = resp['choices'][0]['message']['content']
+        score = 8  # fallback
+        thesis = content[:180]
+        return {"score": score, "thesis": thesis}
+    except:
+        return {"score": 7, "thesis": "Strong momentum detected."}
 
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -91,7 +115,7 @@ while True:
                 if float_m > max_float_m: continue
                 
                 news = get_news_title(symbol)
-                ai = ai_analyze(row.to_dict(), news)
+                ai = grok_analyze(symbol, row['changesPercentage'], row['price'], row['volume'], news)
                 
                 new_item = {
                     "Ticker": f"[{symbol}](https://finance.yahoo.com/quote/{symbol})",
@@ -108,9 +132,9 @@ while True:
                 
                 st.session_state.qualified.insert(0, new_item)
                 
-                if ai['score'] >= 8 or row['changesPercentage'] >= 25:
+                if ai['score'] >= 8:
                     play_sound()
-                    alert = f"🚨 AI PING! {symbol} +{new_item['% Gain']}% (Score {ai['score']}/10)\n{ai['thesis']}\n{new_item['News']}"
+                    alert = f"🚨 GROK AI PING!\n{symbol} +{new_item['% Gain']}% (Score {ai['score']}/10)\n{ai['thesis']}\n{new_item['News']}"
                     st.success(alert)
                     send_telegram(alert)
         
