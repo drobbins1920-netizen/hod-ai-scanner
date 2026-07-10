@@ -31,7 +31,7 @@ if "top_gainers_history" not in st.session_state:
 if "last_top_change" not in st.session_state:
     st.session_state.last_top_change = 0
 
-# #1 Gainer Box (always visible, right under title)
+# #1 Gainer Box
 gainer_box = st.empty()
 
 # Filters
@@ -52,19 +52,19 @@ with st.expander("📊 Filters", expanded=True):
             st.session_state.last_top_change = 0
             st.rerun()
 
-# Layout
-left_col, right_col = st.columns([2, 3])
+# Outlined Layout
+col_left, col_right = st.columns([2, 3])
 
-with left_col:
-    st.subheader("🏆 Top Gainers")
+with col_left:
+    st.markdown('<div style="border: 2px solid #444; border-radius: 8px; padding: 10px;">🏆 Top Gainers</div>', unsafe_allow_html=True)
     session_filter = st.selectbox("Session", ["Pre-Market", "Regular Hours", "After Hours"], index=1)
     top_gainers_placeholder = st.empty()
 
-with right_col:
-    st.subheader("🔍 Live HOD Scanner")
+with col_right:
+    st.markdown('<div style="border: 2px solid #444; border-radius: 8px; padding: 10px;">🔍 Live HOD Scanner</div>', unsafe_allow_html=True)
     scanner_placeholder = st.empty()
 
-st.subheader("📈 Mini Charts")
+st.markdown('<div style="border: 2px solid #444; border-radius: 8px; padding: 10px;">📈 Mini Charts</div>', unsafe_allow_html=True)
 charts_placeholder = st.empty()
 
 placeholder = st.empty()
