@@ -6,10 +6,10 @@ from datetime import datetime
 import pytz
 from dotenv import load_dotenv
 import os
-import yfinance as yf
-import websocket
-import json
 import threading
+from webull.data.data_streaming_client import DataStreamingClient
+from webull.data.common.category import Category
+from webull.data.common.subscribe_type import SubscribeType
 
 load_dotenv()
 
@@ -17,7 +17,8 @@ FMP_API_KEY = os.getenv("FMP_API_KEY")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-WEBULL_API_KEY = os.getenv("WEBULL_API_KEY")
+WEBULL_APP_KEY = os.getenv("WEBULL_APP_KEY")
+WEBULL_APP_SECRET = os.getenv("WEBULL_APP_SECRET")
 
 st.set_page_config(page_title="DR Dashboard", layout="wide")
 st.title("DR Dashboard")
@@ -28,16 +29,14 @@ if "qualified" not in st.session_state:
     st.session_state.qualified = []
 if "stats" not in st.session_state:
     st.session_state.stats = {"pings": 0, "strong": 0}
-if "top_gainers_history" not in st.session_state:
-    st.session_state.top_gainers_history = pd.DataFrame()
 if "last_top_change" not in st.session_state:
     st.session_state.last_top_change = 0
 if "last_news" not in st.session_state:
     st.session_state.last_news = []
 if "use_webull" not in st.session_state:
     st.session_state.use_webull = False
-if "webull_data" not in st.session_state:
-    st.session_state.webull_data = pd.DataFrame()
+if "webull_quotes" not in st.session_state:
+    st.session_state.webull_quotes = {}
 
 # #1 Gainer Box
 gainer_box = st.empty()
@@ -53,14 +52,13 @@ with st.expander("📊 Filters", expanded=True):
         min_rvol = st.slider("Min RVOL", 1.0, 10.0, 1.5, step=0.5)
     with col3:
         refresh_sec = st.slider("Refresh (seconds)", 10, 60, 20)
-        use_webull_toggle = st.checkbox("Use Webull WebSocket", value=st.session_state.use_webull)
+        use_webull_toggle = st.checkbox("Use Webull Streaming", value=st.session_state.use_webull)
         if use_webull_toggle != st.session_state.use_webull:
             st.session_state.use_webull = use_webull_toggle
             st.rerun()
         if st.button("Clear Dashboard"):
             st.session_state.qualified = []
             st.session_state.stats = {"pings": 0, "strong": 0}
-            st.session_state.top_gainers_history = pd.DataFrame()
             st.session_state.last_top_change = 0
             st.session_state.last_news = []
             st.rerun()
@@ -89,23 +87,8 @@ def get_top_gainers():
         response = requests.get(url, timeout=15)
         data = response.json()
         if isinstance(data, list):
-            df = pd.DataFrame(data)
-        else:
-            df = pd.DataFrame()
-        return df
-    except:
+            return pd.DataFrame(data)
         return pd.DataFrame()
-
-def get_batch_quotes():
-    url = f"https://financialmodelingprep.com/stable/batch-exchange-quote?exchange=NASDAQ&apikey={FMP_API_KEY}"
-    try:
-        response = requests.get(url, timeout=15)
-        data = response.json()
-        if isinstance(data, list):
-            df = pd.DataFrame(data)
-        else:
-            df = pd.DataFrame()
-        return df
     except:
         return pd.DataFrame()
 
@@ -154,46 +137,42 @@ def play_sound():
 def speak(text):
     st.components.v1.html(f'<script>speechSynthesis.speak(new SpeechSynthesisUtterance("{text}"));</script>', height=0)
 
-# Webull WebSocket
-def on_message(ws, message):
-    try:
-        data = json.loads(message)
-        if 'data' in data:
-            st.session_state.webull_data = pd.DataFrame(data['data'])
-    except:
-        pass
+# Webull Streaming
+def on_connect(client, api_client, session_id):
+    st.success("Webull connected")
+    client.subscribe(
+        ["AAPL", "TSLA", "NVDA", "AMD", "SMCI"],
+        Category.US_STOCK.name,
+        [SubscribeType.QUOTE.name, SubscribeType.SNAPSHOT.name]
+    )
 
-def on_error(ws, error):
-    st.error(f"Webull error: {error}")
+def on_quotes_message(client, topic, quotes):
+    for quote in quotes:
+        symbol = quote.get('symbol')
+        if symbol:
+            st.session_state.webull_quotes[symbol] = quote
 
-def on_close(ws, close_status_code, close_msg):
-    st.warning("Webull connection closed")
+def on_subscribe_success(client, api_client, session_id):
+    st.success("Subscribed to market data")
 
-def on_open(ws):
-    st.success("Webull WebSocket connected")
-    subscribe_msg = {
-        "action": "subscribe",
-        "params": {
-            "symbols": "AAPL,TSLA,NVDA,AMD,SMCI",
-            "fields": "last,change,volume"
-        }
-    }
-    ws.send(json.dumps(subscribe_msg))
-
-def start_webull_ws():
+def start_webull_stream():
     if st.session_state.use_webull:
-        ws = websocket.WebSocketApp(
-            "wss://api.webull.com/ws",
-            on_open=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close
+        client = DataStreamingClient(
+            WEBULL_APP_KEY,
+            WEBULL_APP_SECRET,
+            "us",
+            "dr_dashboard",
+            http_host="api.webull.com",
+            mqtt_host="data-api.webull.com"
         )
-        ws.run_forever()
+        client.on_connect_success = on_connect
+        client.on_quotes_message = on_quotes_message
+        client.on_subscribe_success = on_subscribe_success
+        client.connect_and_loop_forever()
 
-# Start Webull in background
+# Start streaming
 if st.session_state.use_webull:
-    threading.Thread(target=start_webull_ws, daemon=True).start()
+    threading.Thread(target=start_webull_stream, daemon=True).start()
 
 while True:
     with placeholder.container():
@@ -202,7 +181,7 @@ while True:
         df = get_top_gainers()
         
         if not df.empty:
-            # #1 Gainer Box
+            # #1 Gainer Box (same as before)
             top = df.iloc[0]
             color = "lime" if top.get('changesPercentage', 0) > 0 else "red"
             flash_speed = "0.5s" if abs(top.get('changesPercentage', 0) - st.session_state.last_top_change) >= 10 else "5s"
@@ -228,10 +207,7 @@ while True:
             
             # Live HOD Scanner
             with scanner_placeholder.container():
-                if st.session_state.use_webull and not st.session_state.webull_data.empty:
-                    quotes_df = st.session_state.webull_data
-                else:
-                    quotes_df = get_batch_quotes()
+                quotes_df = pd.DataFrame(list(st.session_state.webull_quotes.values())) if st.session_state.use_webull else get_batch_quotes()
                 if not quotes_df.empty:
                     candidates = quotes_df[
                         (quotes_df.get('change', 0) >= min_gain) &
@@ -273,7 +249,6 @@ while True:
                             st.success(alert)
                             send_telegram(alert)
                         
-                        # Voice for scanner tickers
                         speak(f"{symbol}")
                 
                 st.session_state.qualified = st.session_state.qualified[:10]
@@ -282,20 +257,18 @@ while True:
         with news_placeholder.container():
             news_df = get_latest_news()
             if not news_df.empty:
-                new_news = []
                 for _, item in news_df.head(5).iterrows():
                     title = item.get('title', 'No Title')
                     url = item.get('url', '#')
                     ticker = item.get('symbol', '')
                     if title not in st.session_state.last_news:
-                        new_news.append(title)
                         speak(f"{ticker} {title}")
                         send_telegram(f"📰 News: {title}\n{item.get('text', '')[:200]}...\nRead more: {url}")
                     st.markdown(f"**[{title}]({url})**")
                     st.caption(item.get('publishedDate', ''))
                     st.write(item.get('text', 'No summary')[:300] + "...")
                     st.markdown("---")
-                st.session_state.last_news = list(news_df.head(10)['title'])
+                st.session_state.last_news = list(news_df.head(10).get('title', []))
             else:
                 st.write("No news available")
         
