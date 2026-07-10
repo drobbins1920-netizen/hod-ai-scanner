@@ -72,10 +72,12 @@ placeholder = st.empty()
 def get_top_gainers():
     url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={FMP_API_KEY}"
     try:
-        data = requests.get(url, timeout=15).json()
-        df = pd.DataFrame(data)
-        if not df.empty:
-            st.success(f"Fetched {len(df)} gainers")
+        response = requests.get(url, timeout=15)
+        data = response.json()
+        if isinstance(data, list):
+            df = pd.DataFrame(data)
+        else:
+            df = pd.DataFrame()
         return df
     except Exception as e:
         st.error(f"Error fetching gainers: {e}")
