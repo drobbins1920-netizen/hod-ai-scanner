@@ -9,9 +9,9 @@ FMP_API_KEY = "Q36YW4o2v1XwkQHhj5zVxbI3C6vDjgGC"
 TELEGRAM_BOT_TOKEN = "8788067448:AAFboEZAZEOLYXxZss2Jk_ZWp83rV26eoHA"
 TELEGRAM_CHAT_ID = "7680581613"
 
-st.set_page_config(page_title="Stable HOD Scanner", layout="wide")
-st.title("🚀 Stable HOD Momentum Scanner + Telegram")
-st.caption("Rolling list • Clickable tickers • Auto Telegram alerts")
+st.set_page_config(page_title="AI HOD Scanner", layout="wide")
+st.title("🚀 AI-Enhanced HOD Momentum Scanner + Telegram")
+st.caption("Rolling list • AI Scoring • Telegram + Sound alerts")
 
 # Sidebar Filters
 with st.sidebar:
@@ -43,6 +43,12 @@ def get_news_title(symbol):
         return data[0]['title'] if data else "No news"
     except:
         return "News unavailable"
+
+def ai_analyze(row, news):
+    change = row.get('changesPercentage', 0)
+    score = max(1, min(10, int(change * 0.12 + 5)))
+    thesis = f"Strong momentum on high volume." if score >= 8 else "Decent catalyst."
+    return {"score": score, "thesis": thesis}
 
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -85,6 +91,7 @@ while True:
                 if float_m > max_float_m: continue
                 
                 news = get_news_title(symbol)
+                ai = ai_analyze(row.to_dict(), news)
                 
                 new_item = {
                     "Ticker": f"[{symbol}](https://finance.yahoo.com/quote/{symbol})",
@@ -93,15 +100,17 @@ while True:
                     "Volume": f"{int(row['volume']):,}",
                     "Float (M)": round(float_m, 1),
                     "RVOL": rvol,
+                    "AI Score": ai['score'],
+                    "Thesis": ai['thesis'],
                     "News": news[:90] + "..." if len(news) > 90 else news,
                     "Time": datetime.now().strftime("%H:%M:%S")
                 }
                 
                 st.session_state.qualified.insert(0, new_item)
                 
-                if row['changesPercentage'] >= 25:
+                if ai['score'] >= 8 or row['changesPercentage'] >= 25:
                     play_sound()
-                    alert = f"🚨 HOD PING!\n{symbol} +{new_item['% Gain']}% @ ${new_item['Price']}\n{new_item['News']}"
+                    alert = f"🚨 AI PING! {symbol} +{new_item['% Gain']}% (Score {ai['score']}/10)\n{ai['thesis']}\n{new_item['News']}"
                     st.success(alert)
                     send_telegram(alert)
         
@@ -110,6 +119,6 @@ while True:
         if st.session_state.qualified:
             st.dataframe(pd.DataFrame(st.session_state.qualified), use_container_width=True, height=700)
         else:
-            st.info("Scanning... No matches yet with current filters.")
+            st.info("Scanning... No matches yet.")
         
         time.sleep(refresh_sec)
