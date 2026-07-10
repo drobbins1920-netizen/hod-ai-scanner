@@ -217,19 +217,20 @@ while True:
             
             st.session_state.qualified = st.session_state.qualified[:20]
         
-        # Latest News with Voice + Telegram
+        # Latest News with Voice + Telegram + Link
         with news_placeholder.container():
             news_df = get_latest_news()
             if not news_df.empty:
                 new_news = []
                 for _, item in news_df.head(5).iterrows():
                     title = item.get('title', 'No Title')
+                    url = item.get('url', '#')
                     ticker = item.get('symbol', '')
                     if title not in st.session_state.last_news:
                         new_news.append(title)
-                        speak(f"{ticker} {title}")  # Computer voice: ticker + headline
-                        send_telegram(f"📰 News: {title}\n{item.get('text', '')[:200]}...")
-                    st.markdown(f"**{title}**")
+                        speak(f"{ticker} {title}")  # Computer voice
+                        send_telegram(f"📰 News: {title}\n{item.get('text', '')[:200]}...\nRead more: {url}")
+                    st.markdown(f"**[{title}]({url})**")
                     st.caption(item.get('publishedDate', ''))
                     st.write(item.get('text', 'No summary')[:300] + "...")
                     st.markdown("---")
