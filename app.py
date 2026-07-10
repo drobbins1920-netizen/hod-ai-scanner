@@ -36,15 +36,15 @@ if "last_news" not in st.session_state:
 # #1 Gainer Box
 gainer_box = st.empty()
 
-# Filters (for scanner)
+# Filters
 with st.expander("📊 Filters", expanded=True):
     col1, col2, col3 = st.columns(3)
     with col1:
-        min_gain = st.slider("Min % Gain", 5, 100, 10)  # Lowered for testing
-        min_price, max_price = st.slider("Price Range ($)", 0.5, 50.0, (1.0, 50.0), step=0.5)
+        min_gain = st.slider("Min % Gain", 5, 100, 5)  # Very relaxed for testing
+        min_price, max_price = st.slider("Price Range ($)", 0.5, 50.0, (0.5, 50.0), step=0.5)
     with col2:
-        max_float_m = st.slider("Max Float (M)", 5, 200, 100)
-        min_rvol = st.slider("Min RVOL", 1.0, 10.0, 2.0, step=0.5)
+        max_float_m = st.slider("Max Float (M)", 5, 500, 300)
+        min_rvol = st.slider("Min RVOL", 1.0, 10.0, 1.5, step=0.5)
     with col3:
         refresh_sec = st.slider("Refresh (seconds)", 10, 60, 20)
         if st.button("Clear Dashboard"):
@@ -87,20 +87,12 @@ def get_top_gainers():
         return pd.DataFrame()
 
 def get_latest_news():
-    url = f"https://financialmodelingprep.com/stable/news/stock-latest?limit=10&apikey={FMP_API_KEY}"
+    url = f"https://financialmodelingprep.com/stable/news/stock-latest?limit=20&apikey={FMP_API_KEY}"
     try:
         data = requests.get(url, timeout=15).json()
         return pd.DataFrame(data)
     except:
         return pd.DataFrame()
-
-def get_news_title(symbol):
-    url = f"https://financialmodelingprep.com/api/v3/stock_news?tickers={symbol}&limit=1&apikey={FMP_API_KEY}"
-    try:
-        data = requests.get(url, timeout=8).json()
-        return data[0]['title'] if data else "No news"
-    except:
-        return "News unavailable"
 
 def grok_analyze(symbol, change, price, volume, news):
     prompt = f"""Analyze this HOD momentum stock:
@@ -170,7 +162,7 @@ while True:
                     cols.append('volume')
                 st.dataframe(display_df[cols], use_container_width=True, height=400)
             
-            # Live HOD Scanner (relaxed for testing new highs)
+            # Live HOD Scanner (relaxed for testing)
             with scanner_placeholder.container():
                 candidates = df[
                     (df.get('changesPercentage', 0) >= min_gain) &
@@ -186,7 +178,7 @@ while True:
                     if rvol < min_rvol: continue
                     
                     float_m = 999
-                    news = get_news_title(symbol)
+                    news = get_news_title(symbol) if 'get_news_title' in globals() else "No news"
                     ai = grok_analyze(symbol, row.get('changesPercentage', 0), row.get('price', 0), row.get('volume', 0), news)
                     
                     new_item = {
@@ -217,7 +209,7 @@ while True:
             
             st.session_state.qualified = st.session_state.qualified[:20]
         
-        # Latest News with Voice + Telegram + Link
+        # Latest News (rolling 10 headlines)
         with news_placeholder.container():
             news_df = get_latest_news()
             if not news_df.empty:
