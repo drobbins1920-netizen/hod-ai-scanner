@@ -64,8 +64,9 @@ with col_right:
     st.markdown('<div style="border: 2px solid #444; border-radius: 8px; padding: 10px;">🔍 Live HOD Scanner</div>', unsafe_allow_html=True)
     scanner_placeholder = st.empty()
 
-st.markdown('<div style="border: 2px solid #444; border-radius: 8px; padding: 10px;">📈 Mini Charts</div>', unsafe_allow_html=True)
-charts_placeholder = st.empty()
+# News Box
+st.markdown('<div style="border: 2px solid #444; border-radius: 8px; padding: 10px;">📰 Latest News</div>', unsafe_allow_html=True)
+news_placeholder = st.empty()
 
 placeholder = st.empty()
 
@@ -79,6 +80,14 @@ def get_top_gainers():
         else:
             df = pd.DataFrame()
         return df
+    except:
+        return pd.DataFrame()
+
+def get_latest_news():
+    url = f"https://financialmodelingprep.com/stable/news/stock-latest?limit=10&apikey={FMP_API_KEY}"
+    try:
+        data = requests.get(url, timeout=15).json()
+        return pd.DataFrame(data)
     except:
         return pd.DataFrame()
 
@@ -149,7 +158,7 @@ while True:
             
             st.session_state.last_top_change = top.get('changesPercentage', 0)
             
-            # Top Gainers list (robust columns)
+            # Top Gainers list
             with top_gainers_placeholder.container():
                 display_df = df.head(15).copy()
                 display_df['% Change'] = display_df.get('changesPercentage', 0).apply(lambda x: f"{x:.2f}%")
@@ -204,33 +213,17 @@ while True:
                     speak(f"{symbol} news catalyst" if "news" in news.lower() else symbol)
             
             st.session_state.qualified = st.session_state.qualified[:20]
-            
-            # Charts
-            with charts_placeholder.container():
-                for item in st.session_state.qualified[:4]:
-                    symbol = item["Ticker"].split('[')[1].split(']')[0] if '[' in item["Ticker"] else item["Ticker"]
-                    st.markdown(f"**{symbol}**")
-                    try:
-                        data = yf.download(symbol, period="1d", interval="5m")
-                        if not data.empty:
-                            data['MA5'] = data['Close'].rolling(5).mean()
-                            data['MA20'] = data['Close'].rolling(20).mean()
-                            data['TypicalPrice'] = (data['High'] + data['Low'] + data['Close']) / 3
-                            data['TPV'] = data['TypicalPrice'] * data['Volume']
-                            data['VWAP'] = data['TPV'].cumsum() / data['Volume'].cumsum()
-                            exp1 = data['Close'].ewm(span=12, adjust=False).mean()
-                            exp2 = data['Close'].ewm(span=26, adjust=False).mean()
-                            data['MACD'] = exp1 - exp2
-                            data['Signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
-                            
-                            fig = make_subplots(rows=3, cols=1, shared_xaxes=True, row_heights=[0.5, 0.3, 0.2])
-                            fig.add_trace(go.Candlestick(x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close']), row=1, col=1)
-                            fig.add_trace(go.Scatter(x=data.index, y=data['VWAP'], name="VWAP", line=dict(color="orange")), row=1, col=1)
-                            fig.add_trace(go.Bar(x=data.index, y=data['Volume']), row=2, col=1)
-                            fig.add_trace(go.Scatter(x=data.index, y=data['MACD'], name="MACD"), row=3, col=1)
-                            fig.add_trace(go.Scatter(x=data.index, y=data['Signal'], name="Signal"), row=3, col=1)
-                            st.plotly_chart(fig, use_container_width=True)
-                    except:
-                        st.write(f"Chart unavailable for {symbol}")
+        
+        # Latest News
+        with news_placeholder.container():
+            news_df = get_latest_news()
+            if not news_df.empty:
+                for _, item in news_df.head(5).iterrows():
+                    st.markdown(f"**{item.get('title', 'No Title')}**")
+                    st.caption(item.get('publishedDate', ''))
+                    st.write(item.get('text', 'No summary')[:300] + "...")
+                    st.markdown("---")
+            else:
+                st.write("No news available")
         
         time.sleep(refresh_sec)
