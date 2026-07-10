@@ -7,8 +7,9 @@ import pytz
 from dotenv import load_dotenv
 import os
 import yfinance as yf
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+import websocket
+import json
+import threading
 
 load_dotenv()
 
@@ -16,6 +17,7 @@ FMP_API_KEY = os.getenv("FMP_API_KEY")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+WEBULL_API_KEY = os.getenv("WEBULL_API_KEY")
 
 st.set_page_config(page_title="DR Dashboard", layout="wide")
 st.title("DR Dashboard")
@@ -32,6 +34,8 @@ if "last_top_change" not in st.session_state:
     st.session_state.last_top_change = 0
 if "last_news" not in st.session_state:
     st.session_state.last_news = []
+if "use_webull" not in st.session_state:
+    st.session_state.use_webull = False
 
 # #1 Gainer Box
 gainer_box = st.empty()
@@ -47,6 +51,10 @@ with st.expander("📊 Filters", expanded=True):
         min_rvol = st.slider("Min RVOL", 1.0, 10.0, 1.5, step=0.5)
     with col3:
         refresh_sec = st.slider("Refresh (seconds)", 10, 60, 20)
+        use_webull_toggle = st.checkbox("Use Webull WebSocket", value=st.session_state.use_webull)
+        if use_webull_toggle != st.session_state.use_webull:
+            st.session_state.use_webull = use_webull_toggle
+            st.rerun()
         if st.button("Clear Dashboard"):
             st.session_state.qualified = []
             st.session_state.stats = {"pings": 0, "strong": 0}
@@ -144,6 +152,19 @@ def play_sound():
 def speak(text):
     st.components.v1.html(f'<script>speechSynthesis.speak(new SpeechSynthesisUtterance("{text}"));</script>', height=0)
 
+# Webull WebSocket (placeholder - needs proper setup)
+def on_webull_message(ws, message):
+    st.write("Webull message:", message)  # For testing
+
+def start_webull_ws():
+    if st.session_state.use_webull:
+        ws = websocket.WebSocketApp("wss://api.webull.com/ws", on_message=on_webull_message)
+        ws.run_forever()
+
+# Start Webull in thread if enabled
+if st.session_state.use_webull:
+    threading.Thread(target=start_webull_ws, daemon=True).start()
+
 while True:
     with placeholder.container():
         st.caption(f"EDT: {datetime.now(edt).strftime('%H:%M:%S')} | Refresh: {refresh_sec}s")
@@ -175,7 +196,7 @@ while True:
                     cols.append('volume')
                 st.dataframe(display_df[cols], use_container_width=True, height=400)
             
-            # Live HOD Scanner using batch quotes
+            # Live HOD Scanner
             with scanner_placeholder.container():
                 quotes_df = get_batch_quotes()
                 if not quotes_df.empty:
