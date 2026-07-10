@@ -70,16 +70,19 @@ charts_placeholder = st.empty()
 placeholder = st.empty()
 
 def get_top_gainers():
-    url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={FMP_API_KEY}"
+    url = f"https://financialmodelingprep.com/stable/biggest-gainers?apikey={FMP_API_KEY}"
     try:
         response = requests.get(url, timeout=15)
+        st.write("Status:", response.status_code)
         data = response.json()
+        st.write("Data type:", type(data))
         if isinstance(data, list):
             df = pd.DataFrame(data)
         else:
             df = pd.DataFrame()
         if not df.empty:
             st.success(f"Fetched {len(df)} gainers")
+            st.write(df.head(5))
         return df
     except Exception as e:
         st.error(f"Error: {e}")
