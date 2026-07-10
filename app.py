@@ -52,25 +52,24 @@ with st.expander("📊 Filters", expanded=True):
             st.session_state.last_top_change = 0
             st.rerun()
 
-# Outlined Layout
-col_left, col_right = st.columns([2, 3])
+# Layout
+left_col, right_col = st.columns([2, 3])
 
-with col_left:
-    st.markdown('<div style="border: 2px solid #444; border-radius: 8px; padding: 10px;">🏆 Top Gainers</div>', unsafe_allow_html=True)
+with left_col:
+    st.subheader("🏆 Top Gainers")
     session_filter = st.selectbox("Session", ["Pre-Market", "Regular Hours", "After Hours"], index=1)
     top_gainers_placeholder = st.empty()
 
-with col_right:
-    st.markdown('<div style="border: 2px solid #444; border-radius: 8px; padding: 10px;">🔍 Live HOD Scanner</div>', unsafe_allow_html=True)
+with right_col:
+    st.subheader("🔍 Live HOD Scanner")
     scanner_placeholder = st.empty()
 
-st.markdown('<div style="border: 2px solid #444; border-radius: 8px; padding: 10px;">📈 Mini Charts</div>', unsafe_allow_html=True)
+st.subheader("📈 Mini Charts")
 charts_placeholder = st.empty()
 
 placeholder = st.empty()
 
 def get_top_gainers():
-    st.write("Gainers fetched:", len(df))
     url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={FMP_API_KEY}"
     try:
         return pd.DataFrame(requests.get(url, timeout=15).json())
