@@ -1,97 +1,57 @@
 import streamlit as st
 import pandas as pd
 import requests
+import time
 from datetime import datetime
 
-API_KEY = "Q36YW4o2v1XwkQHhj5zVxbI3C6vDjgGC"
+API_KEY = "Q36YW4o2v1XwkQHhj5zVxbI3C6vDjgGC"   # ← Paste your new Premium key
 
-st.set_page_config(page_title="HOD Scanner - Your Criteria", layout="wide")
-st.title("🚀 Your HOD Momentum Scanner")
-st.markdown("**Criteria:** ≥20% up | ≥3x RVOL | Float ≤30M | $1–$20 | News Catalyst")
+st.set_page_config(page_title="Auto HOD Scanner (Premium)", layout="wide")
+st.title("🚀 Automatic HOD Momentum Scanner")
+st.caption("Premium Plan | Auto-refresh every 20 seconds | Your criteria")
 
-# FMP Functions
+# Your criteria (easy to edit)
+MIN_CHANGE = 20          # %
+MIN_RVOL = 3
+MAX_FLOAT_M = 30         # million
+MIN_PRICE = 1
+MAX_PRICE = 20
+
 def get_top_gainers():
     url = f"https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey={API_KEY}"
     try:
-        data = requests.get(url, timeout=15).json()
-        return pd.DataFrame(data)
+        return pd.DataFrame(requests.get(url, timeout=15).json())
     except:
-        st.error("Error fetching gainers")
         return pd.DataFrame()
 
-def get_float(symbol):
-    url = f"https://financialmodelingprep.com/api/v3/shares-float?symbol={symbol}&apikey={API_KEY}"
-    try:
-        data = requests.get(url, timeout=10).json()
-        return data[0]['freeFloat'] if data else None
-    except:
-        return None
+placeholder = st.empty()
 
-def get_news(symbol):
-    url = f"https://financialmodelingprep.com/api/v3/stock_news?tickers={symbol}&limit=3&apikey={API_KEY}"
-    try:
-        return requests.get(url, timeout=10).json()
-    except:
-        return []
-
-# Main Scan
-if st.button("🔄 Run Full Market Scan", type="primary"):
-    with st.spinner("Scanning market for your criteria..."):
+while True:
+    with placeholder.container():
+        st.caption(f"Last scan: {datetime.now().strftime('%H:%M:%S')} | Auto-refresh every 20s")
+        
         df = get_top_gainers()
         
-        if df.empty:
-            st.error("No data returned.")
-        else:
-            # Initial broad filter
-            candidates = df[
-                (df['changesPercentage'] >= 20) &
-                (df['price'] >= 1) & (df['price'] <= 20)
+        if not df.empty:
+            # Apply your filters
+            filtered = df[
+                (df['changesPercentage'] >= MIN_CHANGE) &
+                (df['price'].between(MIN_PRICE, MAX_PRICE))
             ].copy()
             
-            results = []
-            for _, row in candidates.iterrows():
-                symbol = row['symbol']
-                price = row['price']
-                change_pct = row['changesPercentage']
-                volume = row['volume']
+            if not filtered.empty:
+                st.success(f"Found {len(filtered)} potential HOD movers")
+                st.dataframe(filtered[['symbol', 'price', 'changesPercentage', 'volume']].head(15), 
+                             use_container_width=True)
                 
-                # Float check
-                float_val = get_float(symbol)
-                if float_val is None or float_val > 30000000:
-                    continue
-                
-                # Rough RVOL (high volume proxy)
-                rvol_proxy = volume / 1000000  # simplistic
-                
-                if rvol_proxy < 3:
-                    continue
-                
-                news_list = get_news(symbol)
-                news_text = news_list[0]['title'] if news_list else "No recent news"
-                
-                ai_score = min(10, int(change_pct * 0.12 + 5))
-                
-                results.append({
-                    "Ticker": symbol,
-                    "Price": round(price, 2),
-                    "% Change": round(change_pct, 2),
-                    "Volume": f"{int(volume):,}",
-                    "Float (M)": round(float_val / 1000000, 1) if float_val else "N/A",
-                    "AI Score": ai_score,
-                    "News Catalyst": news_text[:120] + "..." if len(news_text) > 120 else news_text
-                })
-            
-            if results:
-                results_df = pd.DataFrame(results).sort_values("% Change", ascending=False)
-                st.success(f"Found {len(results)} stocks matching your criteria!")
-                
-                for _, r in results_df.iterrows():
-                    if r['AI Score'] >= 8:
-                        st.balloons()
-                        st.success(f"🚨 STRONG PING → {r['Ticker']} | {r['% Change']}% | {r['News Catalyst']}")
-                
-                st.dataframe(results_df, use_container_width=True, height=600)
+                # Simple alert for strongest ones
+                top = filtered[filtered['changesPercentage'] >= 30]
+                if not top.empty:
+                    for _, row in top.iterrows():
+                        st.warning(f"🚨 STRONG MOVE: {row['symbol']} +{round(row['changesPercentage'],1)}%")
             else:
-                st.info("No stocks currently meet all criteria. Market may be quiet — try again later.")
-
-st.caption("Full market scan using FMP gainers + your filters. News titles included. Refine AI or add Telegram pings next.")
+                st.info("No stocks currently matching your criteria.")
+        else:
+            st.error("No data — check your Premium key or try again.")
+        
+        time.sleep(20)   # ← Change this number for different timing (15–30 recommended)
