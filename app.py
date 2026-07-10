@@ -175,7 +175,7 @@ while True:
                     cols.append('volume')
                 st.dataframe(display_df[cols], use_container_width=True, height=400)
             
-            # Live HOD Scanner using batch quote
+            # Live HOD Scanner using batch quotes
             with scanner_placeholder.container():
                 quotes_df = get_batch_quotes()
                 if not quotes_df.empty:
