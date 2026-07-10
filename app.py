@@ -56,15 +56,15 @@ with st.expander("📊 Filters", expanded=True):
 col_left, col_right = st.columns([2, 3])
 
 with col_left:
-    st.subheader("🏆 Top Gainers")
+    st.markdown('<div style="border: 2px solid #444; border-radius: 8px; padding: 10px;">🏆 Top Gainers</div>', unsafe_allow_html=True)
     session_filter = st.selectbox("Session", ["Pre-Market", "Regular Hours", "After Hours"], index=1)
     top_gainers_placeholder = st.empty()
 
 with col_right:
-    st.subheader("🔍 Live HOD Scanner")
+    st.markdown('<div style="border: 2px solid #444; border-radius: 8px; padding: 10px;">🔍 Live HOD Scanner</div>', unsafe_allow_html=True)
     scanner_placeholder = st.empty()
 
-st.subheader("📈 Mini Charts")
+st.markdown('<div style="border: 2px solid #444; border-radius: 8px; padding: 10px;">📈 Mini Charts</div>', unsafe_allow_html=True)
 charts_placeholder = st.empty()
 
 placeholder = st.empty()
