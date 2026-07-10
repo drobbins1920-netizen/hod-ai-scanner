@@ -40,7 +40,7 @@ gainer_box = st.empty()
 with st.expander("📊 Filters", expanded=True):
     col1, col2, col3 = st.columns(3)
     with col1:
-        min_gain = st.slider("Min % Gain", 5, 100, 5)  # Very relaxed for testing
+        min_gain = st.slider("Min % Gain", 5, 100, 5)
         min_price, max_price = st.slider("Price Range ($)", 0.5, 50.0, (0.5, 50.0), step=0.5)
     with col2:
         max_float_m = st.slider("Max Float (M)", 5, 500, 300)
@@ -83,11 +83,12 @@ def get_top_gainers():
         else:
             df = pd.DataFrame()
         return df
-    except:
+    except Exception as e:
+        st.error(f"Error: {e}")
         return pd.DataFrame()
 
 def get_latest_news():
-    url = f"https://financialmodelingprep.com/stable/news/stock-latest?limit=20&apikey={FMP_API_KEY}"
+    url = f"https://financialmodelingprep.com/stable/news/stock-latest?limit=10&apikey={FMP_API_KEY}"
     try:
         data = requests.get(url, timeout=15).json()
         return pd.DataFrame(data)
@@ -162,7 +163,7 @@ while True:
                     cols.append('volume')
                 st.dataframe(display_df[cols], use_container_width=True, height=400)
             
-            # Live HOD Scanner (relaxed for testing)
+            # Live HOD Scanner (relaxed)
             with scanner_placeholder.container():
                 candidates = df[
                     (df.get('changesPercentage', 0) >= min_gain) &
@@ -209,7 +210,7 @@ while True:
             
             st.session_state.qualified = st.session_state.qualified[:20]
         
-        # Latest News (rolling 10 headlines)
+        # Latest News
         with news_placeholder.container():
             news_df = get_latest_news()
             if not news_df.empty:
