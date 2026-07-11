@@ -4,5 +4,6 @@ requests
 python-dotenv
 yfinance
 plotly
+pytz
 websocket-client
 webull-openapi-python-sdk
