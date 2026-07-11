@@ -6,10 +6,10 @@ from datetime import datetime
 import pytz
 from dotenv import load_dotenv
 import os
+import yfinance as yf
+import websocket
+import json
 import threading
-from webull.data.data_streaming_client import DataStreamingClient
-from webull.data.common.category import Category
-from webull.data.common.subscribe_type import SubscribeType
 
 load_dotenv()
 
@@ -181,7 +181,7 @@ while True:
         df = get_top_gainers()
         
         if not df.empty:
-            # #1 Gainer Box (same as before)
+            # #1 Gainer Box
             top = df.iloc[0]
             color = "lime" if top.get('changesPercentage', 0) > 0 else "red"
             flash_speed = "0.5s" if abs(top.get('changesPercentage', 0) - st.session_state.last_top_change) >= 10 else "5s"
@@ -207,7 +207,10 @@ while True:
             
             # Live HOD Scanner
             with scanner_placeholder.container():
-                quotes_df = pd.DataFrame(list(st.session_state.webull_quotes.values())) if st.session_state.use_webull else get_batch_quotes()
+                if st.session_state.use_webull and st.session_state.webull_quotes:
+                    quotes_df = pd.DataFrame(list(st.session_state.webull_quotes.values()))
+                else:
+                    quotes_df = get_batch_quotes()
                 if not quotes_df.empty:
                     candidates = quotes_df[
                         (quotes_df.get('change', 0) >= min_gain) &
